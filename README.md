@@ -17,9 +17,9 @@ let x:float[] = [0.0, 1.0, 2.0, 3.0]
 let y:float[] = [0.0, 1.0, 4.0, 9.0]
 
 var figure = Plot.line(x, y)
-    .title("Croissance quadratique")
-    .x_label("Temps")
-    .y_label("Valeur")
+    ..title("Croissance quadratique")
+    ..x_label("Temps")
+    ..y_label("Valeur")
 
 figure.show()
 ```
@@ -28,7 +28,7 @@ Compose several marks in one chart before displaying or exporting the figure:
 
 ```sx
 var figure = Plot.line(x, expected, "Modèle")
-    .scatter(x, measured, "Mesures")
+    ..scatter(x, measured, "Mesures")
 
 match figure.save_svg("comparison.svg") {
     failure(error) => { panic(error.operation + ": " + error.detail) }
@@ -43,12 +43,13 @@ or point symbol so this distinction remains visible.
 
 ## Common charts
 
-The top-level functions create a one-chart `Figure` and can be chained:
+The top-level functions create a one-chart `Figure`, which can be configured
+with Silex cascades:
 
 ```sx
 let distribution = Plot.histogram(samples, 30, "Latence")
 let comparison = Plot.bar(["CPU", "GPU"], [82.0, 19.0], "ms")
-let summary = Plot.box_plot(before, "Avant").box_plot(after, "Après")
+let summary = Plot.box_plot(before, "Avant")..box_plot(after, "Après")
 ```
 
 Plot supports:
@@ -75,25 +76,25 @@ Use a grid when a report or experiment needs independent axes and chart types:
 
 ```sx
 var dashboard = Plot.grid(2, 2)
-    .title("Suivi d'entraînement")
-    .size(1280, 800)
+    ..title("Suivi d'entraînement")
+    ..size(1280, 800)
 
 dashboard.at(0, 0)
-    .line(epochs, accuracy, "Validation")
-    .title("Précision")
+    ..line(epochs, accuracy, "Validation")
+    ..title("Précision")
 
 dashboard.at(0, 1)
-    .histogram(errors, 20)
-    .title("Erreurs")
+    ..histogram(errors, 20)
+    ..title("Erreurs")
 
 dashboard.at(1, 0)
-    .heatmap(confusion, 3)
-    .x_categories(classes)
-    .y_categories(classes)
+    ..heatmap(confusion, 3)
+    ..x_categories(classes)
+    ..y_categories(classes)
 
 dashboard.at(1, 1)
-    .bar(devices, latency)
-    .horizontal(target, "Objectif")
+    ..bar(devices, latency)
+    ..horizontal(target, "Objectif")
 
 dashboard.show()
 ```

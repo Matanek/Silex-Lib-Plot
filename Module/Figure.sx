@@ -31,34 +31,28 @@ public class Figure {
         return self.current_charts[row * self.current_columns + column]
     }
 
-    func line(x:float[], y:float[], label:str = "") Figure {
+    func line(x:float[], y:float[], label:str = "") {
         self.first().line(x, y, label)
-        return self
     }
 
-    func scatter(x:float[], y:float[], label:str = "") Figure {
+    func scatter(x:float[], y:float[], label:str = "") {
         self.first().scatter(x, y, label)
-        return self
     }
 
-    func bar(categories:str[], values:float[], label:str = "") Figure {
+    func bar(categories:str[], values:float[], label:str = "") {
         self.first().bar(categories, values, label)
-        return self
     }
 
-    func histogram(values:float[], bins:int = 20, label:str = "") Figure {
+    func histogram(values:float[], bins:int = 20, label:str = "") {
         self.first().histogram(values, bins, label)
-        return self
     }
 
-    func heatmap(values:float[], columns:int, label:str = "") Figure {
+    func heatmap(values:float[], columns:int, label:str = "") {
         self.first().heatmap(values, columns, label)
-        return self
     }
 
-    func band(x:float[], lower:float[], upper:float[], label:str = "") Figure {
+    func band(x:float[], lower:float[], upper:float[], label:str = "") {
         self.first().band(x, lower, upper, label)
-        return self
     }
 
     func error_bars(
@@ -67,14 +61,12 @@ public class Figure {
         lower:float[],
         upper:float[],
         label:str = ""
-    ) Figure {
+    ) {
         self.first().error_bars(x, y, lower, upper, label)
-        return self
     }
 
-    func box_plot(values:float[], label:str = "") Figure {
+    func box_plot(values:float[], label:str = "") {
         self.first().box_plot(values, label)
-        return self
     }
 
     func candlesticks(
@@ -84,51 +76,47 @@ public class Figure {
         low:float[],
         close:float[],
         label:str = ""
-    ) Figure {
+    ) {
         self.first().candlesticks(x, open, high, low, close, label)
-        return self
     }
 
-    func horizontal(value:float, label:str = "") Figure {
+    func horizontal(value:float, label:str = "") {
         self.first().horizontal(value, label)
-        return self
     }
 
-    func vertical(value:float, label:str = "") Figure {
+    func vertical(value:float, label:str = "") {
         self.first().vertical(value, label)
-        return self
     }
 
-    func title(value:str) Figure { self.current_title = value; return self }
-    func x_label(value:str) Figure { self.first().x_label(value); return self }
-    func y_label(value:str) Figure { self.first().y_label(value); return self }
-    func x_categories(values:str[]) Figure { self.first().x_categories(values); return self }
-    func y_categories(values:str[]) Figure { self.first().y_categories(values); return self }
-    func x_log() Figure { self.first().x_log(); return self }
-    func y_log() Figure { self.first().y_log(); return self }
-    func x_linear() Figure { self.first().x_linear(); return self }
-    func y_linear() Figure { self.first().y_linear(); return self }
-    func x_decimals(digits:int) Figure { self.first().x_decimals(digits); return self }
-    func y_decimals(digits:int) Figure { self.first().y_decimals(digits); return self }
-    func x_decimals_auto() Figure { self.first().x_decimals_auto(); return self }
-    func y_decimals_auto() Figure { self.first().y_decimals_auto(); return self }
-    func legend_auto() Figure { self.first().legend_auto(); return self }
-    func legend_hidden() Figure { self.first().legend_hidden(); return self }
-    func legend_right() Figure { self.first().legend_right(); return self }
-    func legend_inside() Figure { self.first().legend_inside(); return self }
-    func legend_inline() Figure { self.first().legend_inline(); return self }
-    func legend_inline_left() Figure { self.first().legend_inline_left(); return self }
-    func legend_inline_center() Figure { self.first().legend_inline_center(); return self }
-    func legend_inline_right() Figure { self.first().legend_inline_right(); return self }
-    func clear() Figure { self.first().clear(); return self }
+    func title(value:str) { self.current_title = value }
+    func x_label(value:str) { self.first().x_label(value) }
+    func y_label(value:str) { self.first().y_label(value) }
+    func x_categories(values:str[]) { self.first().x_categories(values) }
+    func y_categories(values:str[]) { self.first().y_categories(values) }
+    func x_log() { self.first().x_log() }
+    func y_log() { self.first().y_log() }
+    func x_linear() { self.first().x_linear() }
+    func y_linear() { self.first().y_linear() }
+    func x_decimals(digits:int) { self.first().x_decimals(digits) }
+    func y_decimals(digits:int) { self.first().y_decimals(digits) }
+    func x_decimals_auto() { self.first().x_decimals_auto() }
+    func y_decimals_auto() { self.first().y_decimals_auto() }
+    func legend_auto() { self.first().legend_auto() }
+    func legend_hidden() { self.first().legend_hidden() }
+    func legend_right() { self.first().legend_right() }
+    func legend_inside() { self.first().legend_inside() }
+    func legend_inline() { self.first().legend_inline() }
+    func legend_inline_left() { self.first().legend_inline_left() }
+    func legend_inline_center() { self.first().legend_inline_center() }
+    func legend_inline_right() { self.first().legend_inline_right() }
+    func clear() { self.first().clear() }
 
-    func size(width:int, height:int) Figure {
+    func size(width:int, height:int) {
         if width < 320 || height < 240 {
             panic("Plot figure size must be at least 320 by 240 pixels")
         }
         self.current_width = width
         self.current_height = height
-        return self
     }
 
     func show() int {

@@ -5,9 +5,9 @@ test "build a labeled line plot for a package consumer" {
     let x:float[] = [0.0, 1.0, 2.0, 3.0]
     let y:float[] = [0.0, 1.0, 4.0, 9.0]
     let svg = Plot.line(x, y, "Valeurs")
-        .title("Croissance & mesures")
-        .x_label("Temps")
-        .y_label("Valeur")
+        ..title("Croissance & mesures")
+        ..x_label("Temps")
+        ..y_label("Valeur")
         .svg()
 
     assert(Text.contains(svg, "<svg"), "SVG document root")
@@ -21,8 +21,8 @@ test "build a labeled line plot for a package consumer" {
 test "compose line and scatter series in one figure" {
     let x:float[] = [0.0, 1.0, 2.0]
     let svg = Plot.line(x, [0.0, 1.0, 4.0], "Modèle")
-        .scatter(x, [0.1, 0.8, 4.2], "Mesures")
-        .size(640, 420)
+        ..scatter(x, [0.1, 0.8, 4.2], "Mesures")
+        ..size(640, 420)
         .svg()
 
     assert(Text.contains(svg, "width=\"640\""), "configured width")

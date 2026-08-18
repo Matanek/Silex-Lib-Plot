@@ -172,19 +172,17 @@ public class Chart {
         self.next_color = 0
     }
 
-    func line(x:float[], y:float[], label:str = "") Chart {
+    func line(x:float[], y:float[], label:str = "") {
         validate_xy(x, y, "line")
         self.current_lines.append(XYSeries(x:x, y:y, label:label, color:self.take_color()))
-        return self
     }
 
-    func scatter(x:float[], y:float[], label:str = "") Chart {
+    func scatter(x:float[], y:float[], label:str = "") {
         validate_xy(x, y, "scatter")
         self.current_scatters.append(XYSeries(x:x, y:y, label:label, color:self.take_color()))
-        return self
     }
 
-    func bar(categories:str[], values:float[], label:str = "") Chart {
+    func bar(categories:str[], values:float[], label:str = "") {
         if categories.count() == 0 { panic("Plot bar data cannot be empty") }
         if categories.count() != values.count() {
             panic("Plot bars require one value for each category")
@@ -198,10 +196,9 @@ public class Chart {
             label:label,
             color:self.take_color()
         ))
-        return self
     }
 
-    func histogram(values:float[], bins:int = 20, label:str = "") Chart {
+    func histogram(values:float[], bins:int = 20, label:str = "") {
         if values.count() == 0 { panic("Plot histogram data cannot be empty") }
         if bins < 1 { panic("Plot histogram bins must be positive") }
         validate_finite(values, "histogram")
@@ -235,10 +232,9 @@ public class Chart {
             label:label,
             color:self.take_color()
         ))
-        return self
     }
 
-    func heatmap(values:float[], columns:int, label:str = "") Chart {
+    func heatmap(values:float[], columns:int, label:str = "") {
         if columns < 1 { panic("Plot heatmap columns must be positive") }
         if values.count() == 0 || values.count() % columns != 0 {
             panic("Plot heatmap values must form complete rows")
@@ -250,10 +246,9 @@ public class Chart {
             rows:values.count() / columns,
             label:label
         ))
-        return self
     }
 
-    func band(x:float[], lower:float[], upper:float[], label:str = "") Chart {
+    func band(x:float[], lower:float[], upper:float[], label:str = "") {
         validate_xy(x, lower, "band")
         if x.count() != upper.count() { panic("Plot band bounds must match x values") }
         validate_finite(upper, "band")
@@ -265,7 +260,6 @@ public class Chart {
         self.current_bands.append(BandSeries(
             x:x, lower:lower, upper:upper, label:label, color:self.take_color()
         ))
-        return self
     }
 
     func error_bars(
@@ -274,7 +268,7 @@ public class Chart {
         lower:float[],
         upper:float[],
         label:str = ""
-    ) Chart {
+    ) {
         validate_xy(x, y, "error bars")
         if x.count() != lower.count() || x.count() != upper.count() {
             panic("Plot error bar bounds must match the point values")
@@ -291,10 +285,9 @@ public class Chart {
         self.current_errors.append(ErrorSeries(
             x:x, y:y, lower:lower, upper:upper, label:label, color:self.take_color()
         ))
-        return self
     }
 
-    func box_plot(values:float[], label:str = "") Chart {
+    func box_plot(values:float[], label:str = "") {
         if values.count() == 0 { panic("Plot box plot data cannot be empty") }
         validate_finite(values, "box plot")
         var ordered:float[] = []
@@ -310,7 +303,6 @@ public class Chart {
             color:self.take_color()
         ))
         self.current_x_categories.append(label)
-        return self
     }
 
     func candlesticks(
@@ -320,7 +312,7 @@ public class Chart {
         low:float[],
         close:float[],
         label:str = ""
-    ) Chart {
+    ) {
         validate_xy(x, open, "candlesticks")
         if x.count() != high.count() || x.count() != low.count() || x.count() != close.count() {
             panic("Plot candlesticks require matching x, open, high, low, and close values")
@@ -340,70 +332,62 @@ public class Chart {
         self.current_candles.append(CandleSeries(
             x:x, open:open, high:high, low:low, close:close, label:label
         ))
-        return self
     }
 
-    func horizontal(value:float, label:str = "") Chart {
+    func horizontal(value:float, label:str = "") {
         validate_value(value, "horizontal reference")
         self.current_horizontal.append(ReferenceLine(value:value, label:label))
-        return self
     }
 
-    func vertical(value:float, label:str = "") Chart {
+    func vertical(value:float, label:str = "") {
         validate_value(value, "vertical reference")
         self.current_vertical.append(ReferenceLine(value:value, label:label))
-        return self
     }
 
-    func title(value:str) Chart { self.current_title = value; return self }
-    func x_label(value:str) Chart { self.current_x_label = value; return self }
-    func y_label(value:str) Chart { self.current_y_label = value; return self }
-    func x_categories(values:str[]) Chart { self.current_x_categories = values; return self }
-    func y_categories(values:str[]) Chart { self.current_y_categories = values; return self }
-    func x_log() Chart { self.current_x_scale = Scale.logarithmic(); return self }
-    func y_log() Chart { self.current_y_scale = Scale.logarithmic(); return self }
-    func x_linear() Chart { self.current_x_scale = Scale.linear(); return self }
-    func y_linear() Chart { self.current_y_scale = Scale.linear(); return self }
+    func title(value:str) { self.current_title = value }
+    func x_label(value:str) { self.current_x_label = value }
+    func y_label(value:str) { self.current_y_label = value }
+    func x_categories(values:str[]) { self.current_x_categories = values }
+    func y_categories(values:str[]) { self.current_y_categories = values }
+    func x_log() { self.current_x_scale = Scale.logarithmic() }
+    func y_log() { self.current_y_scale = Scale.logarithmic() }
+    func x_linear() { self.current_x_scale = Scale.linear() }
+    func y_linear() { self.current_y_scale = Scale.linear() }
 
-    func x_decimals(digits:int) Chart {
+    func x_decimals(digits:int) {
         validate_decimals(digits)
         self.current_x_decimals = digits
-        return self
     }
 
-    func y_decimals(digits:int) Chart {
+    func y_decimals(digits:int) {
         validate_decimals(digits)
         self.current_y_decimals = digits
-        return self
     }
 
-    func x_decimals_auto() Chart { self.current_x_decimals = -1; return self }
-    func y_decimals_auto() Chart { self.current_y_decimals = -1; return self }
-    func legend_auto() Chart { self.current_legend = LegendPlacement.automatic(); return self }
-    func legend_hidden() Chart { self.current_legend = LegendPlacement.hidden(); return self }
-    func legend_right() Chart { self.current_legend = LegendPlacement.right(); return self }
-    func legend_inside() Chart { self.current_legend = LegendPlacement.inside(); return self }
-    func legend_inline() Chart { self.current_legend = LegendPlacement.inline(); return self }
+    func x_decimals_auto() { self.current_x_decimals = -1 }
+    func y_decimals_auto() { self.current_y_decimals = -1 }
+    func legend_auto() { self.current_legend = LegendPlacement.automatic() }
+    func legend_hidden() { self.current_legend = LegendPlacement.hidden() }
+    func legend_right() { self.current_legend = LegendPlacement.right() }
+    func legend_inside() { self.current_legend = LegendPlacement.inside() }
+    func legend_inline() { self.current_legend = LegendPlacement.inline() }
 
-    func legend_inline_left() Chart {
+    func legend_inline_left() {
         self.current_legend = LegendPlacement.inline()
         self.current_legend_alignment = LegendAlignment.left()
-        return self
     }
 
-    func legend_inline_center() Chart {
+    func legend_inline_center() {
         self.current_legend = LegendPlacement.inline()
         self.current_legend_alignment = LegendAlignment.center()
-        return self
     }
 
-    func legend_inline_right() Chart {
+    func legend_inline_right() {
         self.current_legend = LegendPlacement.inline()
         self.current_legend_alignment = LegendAlignment.right()
-        return self
     }
 
-    func clear() Chart {
+    func clear() {
         self.current_lines = []
         self.current_scatters = []
         self.current_bars = []
@@ -418,7 +402,6 @@ public class Chart {
         self.current_x_categories = []
         self.current_y_categories = []
         self.next_color = 0
-        return self
     }
 
     package func lines() XYSeries[] { return self.current_lines }

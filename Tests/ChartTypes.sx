@@ -3,11 +3,11 @@ use STD.Text
 
 test "render categorical and distribution charts" {
     let bars = Plot.bar(["CPU", "GPU", "NPU"], [82.0, 41.0, 19.0], "Latence")
-        .bar(["CPU", "GPU", "NPU"], [70.0, 32.0, 14.0], "Optimisé")
+        ..bar(["CPU", "GPU", "NPU"], [70.0, 32.0, 14.0], "Optimisé")
         .svg()
     let histogram = Plot.histogram([1.0, 1.2, 1.4, 2.0, 2.1, 2.8], 3, "Distribution").svg()
     let boxes = Plot.box_plot([8.0, 10.0, 10.0, 12.0, 16.0], "Avant")
-        .box_plot([5.0, 6.0, 7.0, 8.0, 9.0], "Après")
+        ..box_plot([5.0, 6.0, 7.0, 8.0, 9.0], "Après")
         .svg()
 
     assert(Text.contains(bars, "data-plot-kind=\"bar\""), "grouped bars")
@@ -19,9 +19,9 @@ test "render categorical and distribution charts" {
 test "render scientific uncertainty and matrix data" {
     let x:float[] = [1.0, 2.0, 3.0]
     let uncertainty = Plot.band(x, [0.8, 1.7, 2.5], [1.2, 2.3, 3.5], "Intervalle")
-        .line(x, [1.0, 2.0, 3.0], "Moyenne")
-        .error_bars(x, [1.0, 2.0, 3.0], [0.9, 1.8, 2.7], [1.1, 2.2, 3.3], "Mesures")
-        .horizontal(2.5, "Seuil")
+        ..line(x, [1.0, 2.0, 3.0], "Moyenne")
+        ..error_bars(x, [1.0, 2.0, 3.0], [0.9, 1.8, 2.7], [1.1, 2.2, 3.3], "Mesures")
+        ..horizontal(2.5, "Seuil")
         .svg()
     let matrix = Plot.heatmap([
         1.0, 0.2, 0.1,
@@ -45,10 +45,10 @@ test "render financial candles and logarithmic axes" {
         "Cours"
     ).svg()
     let logarithmic = Plot.line([1.0, 10.0, 100.0], [1.0, 100.0, 10000.0])
-        .x_log()
-        .y_log()
+        ..x_log()
+        ..y_log()
         .svg()
-    let singleton = Plot.scatter([0.1], [0.2]).x_log().y_log().svg()
+    let singleton = Plot.scatter([0.1], [0.2])..x_log()..y_log().svg()
 
     assert(Text.contains(candles, "data-plot-kind=\"candlesticks\""), "OHLC candles")
     assert(Text.contains(candles, "#059669"), "rising candle")
@@ -58,11 +58,11 @@ test "render financial candles and logarithmic axes" {
 }
 
 test "compose independent charts in a dashboard grid" {
-    var figure = Plot.grid(2, 2).title("Rapport d'expérience").size(1200, 800)
-    figure.at(0, 0).line([0.0, 1.0], [0.0, 1.0]).title("Apprentissage")
-    figure.at(0, 1).histogram([0.1, 0.2, 0.2, 0.4], 2).title("Erreurs")
-    figure.at(1, 0).bar(["A", "B"], [4.0, 7.0]).title("Benchmark")
-    figure.at(1, 1).heatmap([1.0, 0.0, 0.0, 1.0], 2).title("Matrice")
+    var figure = Plot.grid(2, 2)..title("Rapport d'expérience")..size(1200, 800)
+    figure.at(0, 0)..line([0.0, 1.0], [0.0, 1.0])..title("Apprentissage")
+    figure.at(0, 1)..histogram([0.1, 0.2, 0.2, 0.4], 2)..title("Erreurs")
+    figure.at(1, 0)..bar(["A", "B"], [4.0, 7.0])..title("Benchmark")
+    figure.at(1, 1)..heatmap([1.0, 0.0, 0.0, 1.0], 2)..title("Matrice")
     let svg = figure.svg()
 
     assert(Text.contains(svg, "data-plot-panel=\"0\""), "first panel")
@@ -76,8 +76,8 @@ test "round axis labels automatically or to configured decimals" {
         [0.66, 0.74, 0.81, 0.85, 0.88]
     ).svg()
     let configured = Plot.line([0.0, 1.0], [0.0, 1.0])
-        .x_decimals(4)
-        .y_decimals(3)
+        ..x_decimals(4)
+        ..y_decimals(3)
         .svg()
 
     assert(!Text.contains(automatic, "4.2599998"), "hide float representation noise")
@@ -87,11 +87,11 @@ test "round axis labels automatically or to configured decimals" {
 test "choose, hide, and place chart legends" {
     let automatic = Plot.histogram([0.1, 0.2, 0.3], 2, "Erreurs").svg()
     let hidden = Plot.line([0.0, 1.0], [0.0, 1.0], "Modèle")
-        .scatter([0.0, 1.0], [0.1, 0.9], "Mesures")
-        .legend_hidden()
+        ..scatter([0.0, 1.0], [0.1, 0.9], "Mesures")
+        ..legend_hidden()
         .svg()
     let inside = Plot.line([0.0, 1.0], [0.0, 1.0], "Signal")
-        .legend_inside()
+        ..legend_inside()
         .svg()
     let candles = Plot.candlesticks(
         [1.0, 2.0],
@@ -100,15 +100,15 @@ test "choose, hide, and place chart legends" {
         [98.0, 100.0],
         [105.0, 102.0],
         "OHLC"
-    ).legend_right().svg()
+    )..legend_right().svg()
     let inline_left = Plot.line([0.0, 1.0], [0.0, 1.0], "Signal")
-        .legend_inline_left()
+        ..legend_inline_left()
         .svg()
     let inline_center = Plot.line([0.0, 1.0], [0.0, 1.0], "Signal")
-        .legend_inline_center()
+        ..legend_inline_center()
         .svg()
     let inline_right = Plot.line([0.0, 1.0], [0.0, 1.0], "Signal")
-        .legend_inline_right()
+        ..legend_inline_right()
         .svg()
 
     assert(!Text.contains(automatic, "data-plot-legend="), "hide a redundant single-series legend")

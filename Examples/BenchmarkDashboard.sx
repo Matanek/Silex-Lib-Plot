@@ -2,20 +2,20 @@ use Plot
 
 func main() {
     var figure = Plot.grid(1, 2)
-        .title("Rapport de benchmark")
-        .size(1200, 560)
+        ..title("Rapport de benchmark")
+        ..size(1200, 560)
 
     figure.at(0, 0)
-        .bar(["Silex", "C++", "Python"], [1.02, 1.0, 18.4], "Temps relatif")
-        .title("Durée d'exécution")
-        .horizontal(1.0, "Référence C++")
+        ..bar(["Silex", "C++", "Python"], [1.02, 1.0, 18.4], "Temps relatif")
+        ..title("Durée d'exécution")
+        ..horizontal(1.0, "Référence C++")
 
     figure.at(0, 1)
-        .box_plot([9.8, 10.1, 10.0, 10.4, 9.9, 10.2], "Silex")
-        .box_plot([9.7, 9.9, 10.3, 10.0, 9.8, 10.1], "C++")
-        .box_plot([174.0, 183.0, 179.0, 191.0, 176.0], "Python")
-        .title("Variabilité des mesures")
-        .y_label("ms")
+        ..box_plot([9.8, 10.1, 10.0, 10.4, 9.9, 10.2], "Silex")
+        ..box_plot([9.7, 9.9, 10.3, 10.0, 9.8, 10.1], "C++")
+        ..box_plot([174.0, 183.0, 179.0, 191.0, 176.0], "Python")
+        ..title("Variabilité des mesures")
+        ..y_label("ms")
 
     figure.show()
 }
