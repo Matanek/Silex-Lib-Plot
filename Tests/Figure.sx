@@ -13,7 +13,7 @@ test "build a labeled line plot for a package consumer" {
     assert(Text.contains(svg, "<svg"), "SVG document root")
     assert(Text.contains(svg, "<polyline"), "line series")
     assert(Text.contains(svg, "Croissance &amp; mesures"), "escaped title")
-    assert(Text.contains(svg, "Valeurs"), "series legend")
+    assert(!Text.contains(svg, "data-plot-legend="), "single series needs no legend")
     assert(Text.contains(svg, "Temps"), "horizontal axis label")
     assert(Text.contains(svg, "Valeur"), "vertical axis label")
 }
@@ -30,6 +30,7 @@ test "compose line and scatter series in one figure" {
     assert(Text.contains(svg, "<polyline"), "line series")
     assert(Text.contains(svg, "<circle"), "scatter series")
     assert(Text.contains(svg, "r=\"4\" fill=\"#f6339a\""), "scatter legend marker")
+    assert(Text.contains(svg, "data-plot-legend=\"inline\""), "compact inline legend")
     assert(Text.contains(svg, "Modèle"), "first legend entry")
     assert(Text.contains(svg, "Mesures"), "second legend entry")
 }

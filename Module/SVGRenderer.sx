@@ -1,0 +1,459 @@
+use Plot.Chart.Area
+use Plot.Chart.Bounds
+use Plot.Chart.Chart
+use Plot.Chart.LegendEntry
+use Plot.Chart.LegendAlignment
+use Plot.Chart.LegendPlacement
+use Plot.Chart.MarkKind
+use Plot.Chart.Scale
+use Plot.Chart.format_tick
+use Plot.Chart.legend_entry_width
+use Plot.Chart.plot_x
+use Plot.Chart.plot_y
+use Plot.Chart.tick_decimals
+use Plot.Figure.Figure
+use STD.Math
+use STD.Text
+
+package func render(figure:Figure) str {
+    let width = figure.pixel_width()
+    let height = figure.pixel_height()
+    var result = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"$(width)\" height=\"$(height)\" viewBox=\"0 0 $(width) $(height)\">\n"
+    result += "<rect width=\"100%\" height=\"100%\" fill=\"white\"/>\n"
+    var heading_height = 16.0
+    if figure.heading() != "" {
+        result += "<text x=\"24\" y=\"38\" font-family=\"sans-serif\" font-size=\"24\" fill=\"#0f172a\">$(escape_xml(figure.heading()))</text>\n"
+        heading_height = 58.0
+    }
+    let gap = 16.0
+    let margin = 16.0
+    let available_width = width as float - margin * 2.0 - gap * (figure.columns() - 1) as float
+    let available_height = height as float - heading_height - margin - gap * (figure.rows() - 1) as float
+    let cell_width = available_width / figure.columns() as float
+    let cell_height = available_height / figure.rows() as float
+    var charts = figure.charts()
+    var index = 0
+    while index < charts.count() {
+        let row = index / figure.columns()
+        let column = index % figure.columns()
+        let cell = Area(
+            left:margin + column as float * (cell_width + gap),
+            top:heading_height + row as float * (cell_height + gap),
+            width:cell_width,
+            height:cell_height
+        )
+        result += chart_svg(charts[index], cell, index)
+        index++
+    }
+    result += "</svg>\n"
+    return result
+}
+
+func chart_svg(chart:Chart, cell:Area, index:int) str {
+    var result = "<g data-plot-panel=\"$(index)\">\n"
+    result += "<rect x=\"$(cell.left)\" y=\"$(cell.top)\" width=\"$(cell.width)\" height=\"$(cell.height)\" rx=\"8\" fill=\"#f8fafc\"/>\n"
+    if chart.is_empty() { return result + "</g>\n" }
+    let title_height = 36.0
+    let legend_placement = chart.legend_placement(cell.width)
+    var legend_width = 0.0
+    if legend_placement == LegendPlacement.right() { legend_width = 176.0 }
+    let area = Area(
+        left:cell.left + 68.0,
+        top:cell.top + title_height,
+        width:Math.max(cell.width - 88.0 - legend_width, 1.0),
+        height:Math.max(cell.height - title_height - 64.0, 1.0)
+    )
+    let bounds = chart.bounds()
+    result += grid_svg(chart, bounds, area)
+    result += heatmaps_svg(chart, bounds, area)
+    result += bands_svg(chart, bounds, area)
+    result += bars_svg(chart, bounds, area)
+    result += histograms_svg(chart, bounds, area)
+    result += references_svg(chart, bounds, area)
+    result += lines_svg(chart, bounds, area)
+    result += scatters_svg(chart, bounds, area)
+    result += errors_svg(chart, bounds, area)
+    result += boxes_svg(chart, bounds, area)
+    result += candles_svg(chart, bounds, area)
+    result += labels_svg(chart, cell, area, bounds)
+    result += legend_svg(chart, cell, area, legend_placement)
+    result += "</g>\n"
+    return result
+}
+
+func grid_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    let horizontal_categories = chart.horizontal_categories()
+    let vertical_categories = chart.vertical_categories()
+    let x_decimals = tick_decimals(
+        bounds.x_min,
+        bounds.x_max,
+        chart.horizontal_scale(),
+        chart.horizontal_decimals()
+    )
+    let y_decimals = tick_decimals(
+        bounds.y_min,
+        bounds.y_max,
+        chart.vertical_scale(),
+        chart.vertical_decimals()
+    )
+    var result = "<g stroke=\"#e2e8f0\" stroke-width=\"1\" fill=\"none\">\n"
+    var tick = 0
+    while tick <= 5 {
+        let amount = tick as float / 5.0
+        let x = area.left + area.width * amount
+        let y = area.top + area.height * amount
+        result += "<path d=\"M $(x) $(area.top) L $(x) $(area.top + area.height)\"/>\n"
+        result += "<path d=\"M $(area.left) $(y) L $(area.left + area.width) $(y)\"/>\n"
+        tick++
+    }
+    result += "</g>\n<g fill=\"#475569\" font-family=\"sans-serif\" font-size=\"11\">\n"
+    tick = 0
+    while tick <= 5 {
+        let amount = tick as float / 5.0
+        let x = area.left + area.width * amount
+        let y = area.top + area.height * amount
+        let x_value = inverse_tick(bounds.x_min, bounds.x_max, amount, chart.horizontal_scale())
+        let y_value = inverse_tick(bounds.y_min, bounds.y_max, 1.0 - amount, chart.vertical_scale())
+        if horizontal_categories.count() == 0 {
+            result += "<text x=\"$(x)\" y=\"$(area.top + area.height + 20.0)\" text-anchor=\"middle\">$(format_tick(x_value, x_decimals))</text>\n"
+        }
+        if vertical_categories.count() == 0 {
+            result += "<text x=\"$(area.left - 8.0)\" y=\"$(y + 4.0)\" text-anchor=\"end\">$(format_tick(y_value, y_decimals))</text>\n"
+        }
+        tick++
+    }
+    result += "</g>\n"
+    result += "<path d=\"M $(area.left) $(area.top) L $(area.left) $(area.top + area.height) L $(area.left + area.width) $(area.top + area.height)\" fill=\"none\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n"
+    return result
+}
+
+func heatmaps_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    for series in chart.heatmaps() {
+        result += "<g data-plot-kind=\"heatmap\">\n"
+        var minimum = series.values[0]
+        var maximum = series.values[0]
+        for value in series.values { minimum = Math.min(minimum, value); maximum = Math.max(maximum, value) }
+        let span = Math.max(maximum - minimum, 0.000001)
+        var row = 0
+        while row < series.rows {
+            var column = 0
+            while column < series.columns {
+                let value = series.values[row * series.columns + column]
+                let left = plot_x(column as float, bounds, area, chart.horizontal_scale())
+                let right = plot_x((column + 1) as float, bounds, area, chart.horizontal_scale())
+                let top = plot_y((series.rows - row) as float, bounds, area, chart.vertical_scale())
+                let bottom = plot_y((series.rows - row - 1) as float, bounds, area, chart.vertical_scale())
+                result += "<rect x=\"$(left)\" y=\"$(top)\" width=\"$(right - left)\" height=\"$(bottom - top)\" fill=\"$(heat_color((value - minimum) / span))\"/>\n"
+                column++
+            }
+            row++
+        }
+        result += "</g>\n"
+    }
+    return result
+}
+
+func bands_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    for series in chart.bands() {
+        var points = ""
+        var index = 0
+        while index < series.x.count() {
+            points += "$(plot_x(series.x[index], bounds, area, chart.horizontal_scale())),$(plot_y(series.upper[index], bounds, area, chart.vertical_scale())) "
+            index++
+        }
+        index = series.x.count() - 1
+        while index >= 0 {
+            points += "$(plot_x(series.x[index], bounds, area, chart.horizontal_scale())),$(plot_y(series.lower[index], bounds, area, chart.vertical_scale())) "
+            index--
+        }
+        result += "<polygon data-plot-kind=\"band\" points=\"$(points)\" fill=\"$(svg_color(series.color))\" fill-opacity=\"0.20\"/>\n"
+    }
+    return result
+}
+
+func bars_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    let all_bars = chart.bars()
+    let categories = chart.horizontal_categories()
+    let series_count = all_bars.count()
+    if series_count == 0 { return result }
+    let group_width = area.width / Math.max(categories.count(), 1) as float * 0.72
+    let width = group_width / series_count as float
+    var series_index = 0
+    for series in all_bars {
+        result += "<g data-plot-kind=\"bar\">\n"
+        var index = 0
+        while index < series.values.count() {
+            let center = plot_x(index as float, bounds, area, chart.horizontal_scale())
+            let left = center - group_width * 0.5 + series_index as float * width
+            let zero = plot_y(0.0, bounds, area, chart.vertical_scale())
+            let value = plot_y(series.values[index], bounds, area, chart.vertical_scale())
+            result += "<rect x=\"$(left)\" y=\"$(Math.min(zero, value))\" width=\"$(width - 1.0)\" height=\"$(Math.abs(zero - value))\" fill=\"$(svg_color(series.color))\"/>\n"
+            index++
+        }
+        result += "</g>\n"
+        series_index++
+    }
+    return result
+}
+
+func histograms_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    for series in chart.histograms() {
+        result += "<g data-plot-kind=\"histogram\" fill=\"$(svg_color(series.color))\" fill-opacity=\"0.82\">\n"
+        var index = 0
+        while index < series.counts.count() {
+            let left = plot_x(series.edges[index], bounds, area, chart.horizontal_scale())
+            let right = plot_x(series.edges[index + 1], bounds, area, chart.horizontal_scale())
+            let top = plot_y(series.counts[index], bounds, area, chart.vertical_scale())
+            let bottom = plot_y(0.0, bounds, area, chart.vertical_scale())
+            result += "<rect x=\"$(left)\" y=\"$(top)\" width=\"$(Math.max(right - left - 1.0, 1.0))\" height=\"$(bottom - top)\"/>\n"
+            index++
+        }
+        result += "</g>\n"
+    }
+    return result
+}
+
+func references_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = "<g data-plot-kind=\"reference\" stroke=\"#64748b\" stroke-width=\"1.5\" stroke-dasharray=\"5 4\">\n"
+    for line in chart.horizontal_lines() {
+        let y = plot_y(line.value, bounds, area, chart.vertical_scale())
+        result += "<line x1=\"$(area.left)\" y1=\"$(y)\" x2=\"$(area.left + area.width)\" y2=\"$(y)\"/>\n"
+        if line.label != "" { result += "<text x=\"$(area.left + 6.0)\" y=\"$(y - 6.0)\" fill=\"#64748b\" stroke=\"none\" font-family=\"sans-serif\" font-size=\"11\">$(escape_xml(line.label))</text>\n" }
+    }
+    for line in chart.vertical_lines() {
+        let x = plot_x(line.value, bounds, area, chart.horizontal_scale())
+        result += "<line x1=\"$(x)\" y1=\"$(area.top)\" x2=\"$(x)\" y2=\"$(area.top + area.height)\"/>\n"
+        if line.label != "" { result += "<text x=\"$(x + 6.0)\" y=\"$(area.top + 14.0)\" fill=\"#64748b\" stroke=\"none\" font-family=\"sans-serif\" font-size=\"11\">$(escape_xml(line.label))</text>\n" }
+    }
+    return result + "</g>\n"
+}
+
+func lines_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    for series in chart.lines() {
+        if series.x.count() == 1 {
+            result += "<circle data-plot-kind=\"line\" cx=\"$(plot_x(series.x[0], bounds, area, chart.horizontal_scale()))\" cy=\"$(plot_y(series.y[0], bounds, area, chart.vertical_scale()))\" r=\"4.5\" fill=\"$(svg_color(series.color))\"/>\n"
+        } else {
+            var points = ""
+            var index = 0
+            while index < series.x.count() {
+                if index != 0 { points += " " }
+                points += "$(plot_x(series.x[index], bounds, area, chart.horizontal_scale())),$(plot_y(series.y[index], bounds, area, chart.vertical_scale()))"
+                index++
+            }
+            result += "<polyline data-plot-kind=\"line\" points=\"$(points)\" fill=\"none\" stroke=\"$(svg_color(series.color))\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n"
+        }
+    }
+    return result
+}
+
+func scatters_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    for series in chart.scatters() {
+        result += "<g data-plot-kind=\"scatter\" fill=\"$(svg_color(series.color))\">\n"
+        var index = 0
+        while index < series.x.count() {
+            result += "<circle cx=\"$(plot_x(series.x[index], bounds, area, chart.horizontal_scale()))\" cy=\"$(plot_y(series.y[index], bounds, area, chart.vertical_scale()))\" r=\"4.5\"/>\n"
+            index++
+        }
+        result += "</g>\n"
+    }
+    return result
+}
+
+func errors_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    for series in chart.errors() {
+        result += "<g data-plot-kind=\"error-bars\" stroke=\"$(svg_color(series.color))\" stroke-width=\"2\" fill=\"$(svg_color(series.color))\">\n"
+        var index = 0
+        while index < series.x.count() {
+            let x = plot_x(series.x[index], bounds, area, chart.horizontal_scale())
+            let low = plot_y(series.lower[index], bounds, area, chart.vertical_scale())
+            let high = plot_y(series.upper[index], bounds, area, chart.vertical_scale())
+            let y = plot_y(series.y[index], bounds, area, chart.vertical_scale())
+            result += "<line x1=\"$(x)\" y1=\"$(low)\" x2=\"$(x)\" y2=\"$(high)\"/><line x1=\"$(x - 5.0)\" y1=\"$(low)\" x2=\"$(x + 5.0)\" y2=\"$(low)\"/><line x1=\"$(x - 5.0)\" y1=\"$(high)\" x2=\"$(x + 5.0)\" y2=\"$(high)\"/><circle cx=\"$(x)\" cy=\"$(y)\" r=\"3.5\" stroke=\"none\"/>\n"
+            index++
+        }
+        result += "</g>\n"
+    }
+    return result
+}
+
+func boxes_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    let all_boxes = chart.boxes()
+    let width = area.width / Math.max(all_boxes.count(), 1) as float * 0.45
+    var index = 0
+    for series in all_boxes {
+        let x = plot_x(index as float, bounds, area, chart.horizontal_scale())
+        let minimum = plot_y(series.minimum, bounds, area, chart.vertical_scale())
+        let q1 = plot_y(series.first_quartile, bounds, area, chart.vertical_scale())
+        let median = plot_y(series.median, bounds, area, chart.vertical_scale())
+        let q3 = plot_y(series.third_quartile, bounds, area, chart.vertical_scale())
+        let maximum = plot_y(series.maximum, bounds, area, chart.vertical_scale())
+        let color = svg_color(series.color)
+        result += "<g data-plot-kind=\"box-plot\" stroke=\"$(color)\" stroke-width=\"2\"><line x1=\"$(x)\" y1=\"$(minimum)\" x2=\"$(x)\" y2=\"$(maximum)\"/><rect x=\"$(x - width * 0.5)\" y=\"$(q3)\" width=\"$(width)\" height=\"$(q1 - q3)\" fill=\"$(color)\" fill-opacity=\"0.18\"/><line x1=\"$(x - width * 0.5)\" y1=\"$(median)\" x2=\"$(x + width * 0.5)\" y2=\"$(median)\"/><line x1=\"$(x - width * 0.25)\" y1=\"$(minimum)\" x2=\"$(x + width * 0.25)\" y2=\"$(minimum)\"/><line x1=\"$(x - width * 0.25)\" y1=\"$(maximum)\" x2=\"$(x + width * 0.25)\" y2=\"$(maximum)\"/></g>\n"
+        index++
+    }
+    return result
+}
+
+func candles_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    var result = ""
+    for series in chart.candles() {
+        result += "<g data-plot-kind=\"candlesticks\">\n"
+        let width = area.width / Math.max(series.x.count(), 1) as float * 0.55
+        var index = 0
+        while index < series.x.count() {
+            let x = plot_x(series.x[index], bounds, area, chart.horizontal_scale())
+            let high = plot_y(series.high[index], bounds, area, chart.vertical_scale())
+            let low = plot_y(series.low[index], bounds, area, chart.vertical_scale())
+            let open = plot_y(series.open[index], bounds, area, chart.vertical_scale())
+            let close = plot_y(series.close[index], bounds, area, chart.vertical_scale())
+            var color = "#e11d48"
+            if series.close[index] >= series.open[index] { color = "#059669" }
+            result += "<line x1=\"$(x)\" y1=\"$(high)\" x2=\"$(x)\" y2=\"$(low)\" stroke=\"$(color)\" stroke-width=\"2\"/><rect x=\"$(x - width * 0.5)\" y=\"$(Math.min(open, close))\" width=\"$(width)\" height=\"$(Math.max(Math.abs(close - open), 1.0))\" fill=\"$(color)\"/>\n"
+            index++
+        }
+        result += "</g>\n"
+    }
+    return result
+}
+
+func labels_svg(chart:Chart, cell:Area, area:Area, bounds:Bounds) str {
+    var result = "<g fill=\"#0f172a\" font-family=\"sans-serif\">\n"
+    if chart.heading() != "" { result += "<text x=\"$(area.left)\" y=\"$(cell.top + 24.0)\" font-size=\"18\">$(escape_xml(chart.heading()))</text>\n" }
+    if chart.horizontal_label() != "" { result += "<text x=\"$(area.left + area.width * 0.5)\" y=\"$(area.top + area.height + 48.0)\" font-size=\"13\" text-anchor=\"middle\">$(escape_xml(chart.horizontal_label()))</text>\n" }
+    if chart.vertical_label() != "" { result += "<text x=\"$(cell.left + 12.0)\" y=\"$(area.top - 12.0)\" font-size=\"13\">$(escape_xml(chart.vertical_label()))</text>\n" }
+    let categories = chart.horizontal_categories()
+    let heatmaps = chart.heatmaps()
+    let bars = chart.bars()
+    var category_offset = 0.0
+    if heatmaps.count() > 0 && bars.count() == 0 { category_offset = 0.5 }
+    var index = 0
+    while index < categories.count() {
+        let x = plot_x(index as float + category_offset, bounds, area, chart.horizontal_scale())
+        result += "<text x=\"$(x)\" y=\"$(area.top + area.height + 34.0)\" font-size=\"11\" text-anchor=\"middle\">$(escape_xml(categories[index]))</text>\n"
+        index++
+    }
+    let vertical = chart.vertical_categories()
+    index = 0
+    while index < vertical.count() {
+        let y = plot_y((vertical.count() - index) as float - 0.5, bounds, area, chart.vertical_scale())
+        result += "<text x=\"$(area.left - 8.0)\" y=\"$(y + 4.0)\" font-size=\"11\" text-anchor=\"end\">$(escape_xml(vertical[index]))</text>\n"
+        index++
+    }
+    return result + "</g>\n"
+}
+
+func legend_svg(chart:Chart, cell:Area, area:Area, placement:LegendPlacement) str {
+    let entries = chart.legend()
+    if entries.count() == 0 || placement == LegendPlacement.hidden() { return "" }
+    if placement == LegendPlacement.inline() {
+        let y = cell.top + 19.0
+        var left = inline_legend_left(chart, cell, area)
+        var alignment = "left"
+        if chart.legend_alignment() == LegendAlignment.center() { alignment = "center" }
+        if chart.legend_alignment() == LegendAlignment.right() { alignment = "right" }
+        var result = "<g data-plot-legend=\"inline\" data-plot-legend-align=\"$(alignment)\" font-family=\"sans-serif\" font-size=\"12\">\n"
+        var index = 0
+        while index < entries.count() {
+            let entry = entries[index]
+            result += legend_symbol_svg(entry, left, y)
+            result += "<text x=\"$(left + 32.0)\" y=\"$(y + 4.0)\" fill=\"#1e293b\">$(escape_xml(entry.label))</text>\n"
+            left += legend_entry_width(entry.label)
+            index++
+        }
+        return result + "</g>\n"
+    }
+    let width = 164.0
+    let height = entries.count() as float * 22.0 + 14.0
+    var left = area.left + area.width - width - 10.0
+    if placement == LegendPlacement.right() { left = area.left + area.width + 12.0 }
+    let top = area.top + 10.0
+    var placement_name = "inside"
+    if placement == LegendPlacement.right() { placement_name = "right" }
+    var result = "<g data-plot-legend=\"$(placement_name)\" font-family=\"sans-serif\" font-size=\"12\"><rect x=\"$(left)\" y=\"$(top)\" width=\"$(width)\" height=\"$(height)\" rx=\"6\" fill=\"white\" fill-opacity=\"0.92\"/>\n"
+    var index = 0
+    while index < entries.count() {
+        let entry = entries[index]
+        let y = top + 13.0 + index as float * 22.0
+        result += legend_symbol_svg(entry, left, y)
+        result += "<text x=\"$(left + 38.0)\" y=\"$(y + 4.0)\" fill=\"#1e293b\">$(escape_xml(entry.label))</text>\n"
+        index++
+    }
+    return result + "</g>\n"
+}
+
+func inline_legend_left(chart:Chart, cell:Area, area:Area) float {
+    let minimum = area.left + chart.title_width() + 8.0
+    let maximum = cell.left + cell.width - 12.0
+    let width = chart.inline_legend_width()
+    if chart.legend_alignment() == LegendAlignment.right() {
+        return Math.max(minimum, maximum - width)
+    }
+    if chart.legend_alignment() == LegendAlignment.center() {
+        return Math.max(minimum, minimum + (maximum - minimum - width) * 0.5)
+    }
+    return minimum
+}
+
+func legend_symbol_svg(entry:LegendEntry, left:float, y:float) str {
+    let color = svg_color(entry.color)
+    if entry.kind == MarkKind.scatter() {
+        return "<circle data-plot-legend-kind=\"scatter\" cx=\"$(left + 19.0)\" cy=\"$(y)\" r=\"4\" fill=\"$(color)\"/>\n"
+    }
+    if entry.kind == MarkKind.error_bars() {
+        return "<g data-plot-legend-kind=\"error-bars\" stroke=\"$(color)\" stroke-width=\"2\" fill=\"$(color)\"><line x1=\"$(left + 19.0)\" y1=\"$(y - 7.0)\" x2=\"$(left + 19.0)\" y2=\"$(y + 7.0)\"/><line x1=\"$(left + 14.0)\" y1=\"$(y - 7.0)\" x2=\"$(left + 24.0)\" y2=\"$(y - 7.0)\"/><line x1=\"$(left + 14.0)\" y1=\"$(y + 7.0)\" x2=\"$(left + 24.0)\" y2=\"$(y + 7.0)\"/><circle cx=\"$(left + 19.0)\" cy=\"$(y)\" r=\"3\" stroke=\"none\"/></g>\n"
+    }
+    if entry.kind == MarkKind.bar() || entry.kind == MarkKind.histogram() {
+        return "<rect data-plot-legend-kind=\"bar\" x=\"$(left + 10.0)\" y=\"$(y - 5.0)\" width=\"18\" height=\"10\" fill=\"$(color)\"/>\n"
+    }
+    if entry.kind == MarkKind.band() {
+        return "<g data-plot-legend-kind=\"band\"><rect x=\"$(left + 9.0)\" y=\"$(y - 5.0)\" width=\"20\" height=\"10\" fill=\"$(color)\" fill-opacity=\"0.24\"/><line x1=\"$(left + 9.0)\" y1=\"$(y)\" x2=\"$(left + 29.0)\" y2=\"$(y)\" stroke=\"$(color)\" stroke-width=\"2\"/></g>\n"
+    }
+    if entry.kind == MarkKind.box_plot() {
+        return "<rect data-plot-legend-kind=\"box-plot\" x=\"$(left + 12.0)\" y=\"$(y - 6.0)\" width=\"14\" height=\"12\" fill=\"$(color)\" fill-opacity=\"0.18\" stroke=\"$(color)\" stroke-width=\"2\"/>\n"
+    }
+    if entry.kind == MarkKind.candlesticks() {
+        return "<g data-plot-legend-kind=\"candlesticks\"><line x1=\"$(left + 15.0)\" y1=\"$(y - 7.0)\" x2=\"$(left + 15.0)\" y2=\"$(y + 7.0)\" stroke=\"#059669\" stroke-width=\"2\"/><rect x=\"$(left + 11.0)\" y=\"$(y - 4.0)\" width=\"8\" height=\"8\" fill=\"#059669\"/><line x1=\"$(left + 25.0)\" y1=\"$(y - 6.0)\" x2=\"$(left + 25.0)\" y2=\"$(y + 6.0)\" stroke=\"#e11d48\" stroke-width=\"2\"/><rect x=\"$(left + 22.0)\" y=\"$(y - 3.0)\" width=\"6\" height=\"6\" fill=\"#e11d48\"/></g>\n"
+    }
+    return "<line data-plot-legend-kind=\"line\" x1=\"$(left + 9.0)\" y1=\"$(y)\" x2=\"$(left + 29.0)\" y2=\"$(y)\" stroke=\"$(color)\" stroke-width=\"3\"/>\n"
+}
+
+func inverse_tick(minimum:float, maximum:float, amount:float, scale:Scale) float {
+    if scale == Scale.logarithmic() {
+        return Math.pow(10.0, Math.log10(minimum) + (Math.log10(maximum) - Math.log10(minimum)) * amount)
+    }
+    return minimum + (maximum - minimum) * amount
+}
+
+func svg_color(index:int) str {
+    let palette = index % 6
+    if palette == 0 { return "#155dfc" }
+    if palette == 1 { return "#f6339a" }
+    if palette == 2 { return "#009966" }
+    if palette == 3 { return "#fe9a00" }
+    if palette == 4 { return "#7f22fe" }
+    return "#0092b8"
+}
+
+func heat_color(amount:float) str {
+    if amount < 0.2 { return "#dbeafe" }
+    if amount < 0.4 { return "#93c5fd" }
+    if amount < 0.6 { return "#a78bfa" }
+    if amount < 0.8 { return "#fb7185" }
+    return "#e11d48"
+}
+
+func escape_xml(value:str) str {
+    var escaped = Text.replace(value, "&", "&amp;")
+    escaped = Text.replace(escaped, "<", "&lt;")
+    escaped = Text.replace(escaped, ">", "&gt;")
+    escaped = Text.replace(escaped, "\"", "&quot;")
+    return Text.replace(escaped, "'", "&apos;")
+}

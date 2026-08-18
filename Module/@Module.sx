@@ -1,4 +1,9 @@
+public use Plot.Chart.Chart
 public use Plot.Figure.Figure
+
+public func grid(rows:int, columns:int) Figure {
+    return Figure(rows, columns)
+}
 
 public func line(x:float[], y:float[], label:str = "") Figure {
     return Figure().line(x, y, label)
@@ -8,3 +13,43 @@ public func scatter(x:float[], y:float[], label:str = "") Figure {
     return Figure().scatter(x, y, label)
 }
 
+public func bar(categories:str[], values:float[], label:str = "") Figure {
+    return Figure().bar(categories, values, label)
+}
+
+public func histogram(values:float[], bins:int = 20, label:str = "") Figure {
+    return Figure().histogram(values, bins, label)
+}
+
+public func heatmap(values:float[], columns:int, label:str = "") Figure {
+    return Figure().heatmap(values, columns, label)
+}
+
+public func band(x:float[], lower:float[], upper:float[], label:str = "") Figure {
+    return Figure().band(x, lower, upper, label)
+}
+
+public func error_bars(
+    x:float[],
+    y:float[],
+    lower:float[],
+    upper:float[],
+    label:str = ""
+) Figure {
+    return Figure().error_bars(x, y, lower, upper, label)
+}
+
+public func box_plot(values:float[], label:str = "") Figure {
+    return Figure().box_plot(values, label)
+}
+
+public func candlesticks(
+    x:float[],
+    open:float[],
+    high:float[],
+    low:float[],
+    close:float[],
+    label:str = ""
+) Figure {
+    return Figure().candlesticks(x, open, high, low, close, label)
+}

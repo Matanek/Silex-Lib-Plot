@@ -1,0 +1,27 @@
+use Plot
+
+func main() {
+    let sessions:float[] = [1.0, 2.0, 3.0, 4.0, 5.0]
+    var figure = Plot.grid(2, 1)
+        .title("Tableau de marché")
+        .size(1100, 800)
+
+    figure.at(0, 0)
+        .candlesticks(
+            sessions,
+            [100.0, 105.0, 102.0, 108.0, 111.0],
+            [108.0, 109.0, 110.0, 114.0, 116.0],
+            [98.0, 100.0, 101.0, 106.0, 109.0],
+            [105.0, 102.0, 108.0, 111.0, 114.0],
+            "OHLC"
+        )
+        .horizontal(110.0, "Seuil")
+        .title("Cours")
+        .legend_inline()
+
+    figure.at(1, 0)
+        .bar(["J1", "J2", "J3", "J4", "J5"], [120.0, 180.0, 155.0, 210.0, 195.0], "Volume")
+        .title("Volume échangé")
+
+    figure.show()
+}
