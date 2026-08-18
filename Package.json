@@ -1,6 +1,6 @@
 {
   "name": "Plot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "extensions": [],
   "requires": {
     "silex": ">=0.38.25"

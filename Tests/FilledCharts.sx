@@ -1,0 +1,60 @@
+use Plot
+use STD.Text
+
+test "render an overlaid translucent area with a smooth edge" {
+    let svg = Plot.area([0.0, 1.0, 2.0, 3.0], [2.0, 5.0, 3.0, 7.0], "Activité")
+        ..fill_opacity(0.28)
+        ..smooth()
+        ..legend_inside()
+        .svg()
+
+    assert(Text.contains(svg, "data-plot-kind=\"area\""), "area group")
+    assert(Text.contains(svg, "data-plot-area-mode=\"overlaid\""), "overlaid mode")
+    assert(Text.contains(svg, "fill-opacity=\"0.28\""), "custom transparency")
+    assert(Text.contains(svg, " C "), "smooth cubic edge")
+    assert(Text.contains(svg, "data-plot-legend-kind=\"area\""), "filled legend symbol")
+}
+
+test "render stacked and normalized mountain layers" {
+    let stacked = Plot.stacked_area(
+        [0.0, 1.0, 2.0],
+        [[2.0, 4.0, 3.0], [1.0, 2.0, 5.0]],
+        ["Direct", "Recherche"]
+    )
+        ..smooth()
+        .svg()
+    assert(Text.contains(stacked, "data-plot-area-mode=\"stacked\""), "stacked mode")
+    assert(Text.contains(stacked, "Direct"), "first layer legend")
+    assert(Text.contains(stacked, "Recherche"), "second layer legend")
+    let curves = Text.split(stacked, " C ")
+    assert(curves.count() >= 13, "shared stacked boundaries stay smooth")
+
+    let normalized = Plot.normalized_area(
+        [0.0, 1.0, 2.0],
+        [[2.0, 1.0, 3.0], [2.0, 3.0, 1.0]],
+        ["Produit", "Services"]
+    ).svg()
+    assert(Text.contains(normalized, "data-plot-area-mode=\"normalized\""), "normalized mode")
+}
+
+test "render pyramid and funnel stages with intentional labels" {
+    let pyramid = Plot.pyramid(
+        ["Fondations", "Produit", "Croissance", "Vision"],
+        [100.0, 72.0, 46.0, 20.0]
+    )
+        ..show_percentages()
+        .svg()
+    assert(Text.contains(pyramid, "data-plot-kind=\"pyramid\""), "pyramid group")
+    assert(Text.contains(pyramid, "data-plot-stage=\"3\""), "all pyramid stages")
+    assert(Text.contains(pyramid, "Fondations 100%"), "stage label and percentage")
+
+    let funnel = Plot.funnel(
+        ["Visites", "Essais", "Comptes", "Clients"],
+        [1200.0, 640.0, 310.0, 96.0]
+    )
+        ..labels_outside()
+        .svg()
+    assert(Text.contains(funnel, "data-plot-kind=\"funnel\""), "funnel group")
+    assert(Text.contains(funnel, "data-plot-stage-label=\"2\""), "outside stage labels")
+    assert(Text.contains(funnel, "Comptes"), "category label")
+}

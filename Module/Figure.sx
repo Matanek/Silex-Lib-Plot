@@ -3,6 +3,7 @@ use GFX.Viewer
 use Plot.Chart.Chart
 use Plot.CanvasRenderer
 use Plot.SVGRenderer
+use Plot.Style.Palette
 use STD.Error
 use STD.File
 
@@ -37,6 +38,18 @@ public class Figure {
 
     func scatter(x:float[], y:float[], label:str = "") {
         self.first().scatter(x, y, label)
+    }
+
+    func area(x:float[], y:float[], label:str = "") {
+        self.first().area(x, y, label)
+    }
+
+    func stacked_area(x:float[], values:float[][], labels:str[] = []) {
+        self.first().stacked_area(x, values, labels)
+    }
+
+    func normalized_area(x:float[], values:float[][], labels:str[] = []) {
+        self.first().normalized_area(x, values, labels)
     }
 
     func bar(categories:str[], values:float[], label:str = "") {
@@ -79,6 +92,30 @@ public class Figure {
     ) {
         self.first().candlesticks(x, open, high, low, close, label)
     }
+
+    func pie(labels:str[], values:float[]) { self.first().pie(labels, values) }
+    func donut(labels:str[], values:float[]) { self.first().donut(labels, values) }
+    func gauge(value:float, maximum:float = 100.0, label:str = "") {
+        self.first().gauge(value, maximum, label)
+    }
+    func polar_bar(labels:str[], values:float[], maximum:float = 0.0) {
+        self.first().polar_bar(labels, values, maximum)
+    }
+    func pyramid(labels:str[], values:float[]) { self.first().pyramid(labels, values) }
+    func funnel(labels:str[], values:float[]) { self.first().funnel(labels, values) }
+    func palette(value:Palette) { self.first().palette(value) }
+    func fill_opacity(amount:float) { self.first().fill_opacity(amount) }
+    func smooth() { self.first().smooth() }
+    func straight() { self.first().straight() }
+    func inner_radius(amount:float) { self.first().inner_radius(amount) }
+    func slice_gap(degrees:float) { self.first().slice_gap(degrees) }
+    func start_angle(degrees:float) { self.first().start_angle(degrees) }
+    func explode(index:int, amount:float = 0.08) { self.first().explode(index, amount) }
+    func labels_hidden() { self.first().labels_hidden() }
+    func labels_inside() { self.first().labels_inside() }
+    func labels_outside() { self.first().labels_outside() }
+    func show_percentages() { self.first().show_percentages() }
+    func hide_percentages() { self.first().hide_percentages() }
 
     func horizontal(value:float, label:str = "") {
         self.first().horizontal(value, label)

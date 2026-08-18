@@ -13,6 +13,10 @@ use Plot.Chart.legend_entry_width
 use Plot.Chart.plot_x
 use Plot.Chart.plot_y
 use Plot.Chart.tick_decimals
+use Plot.Circular.Kind
+use Plot.Circular.LabelPlacement
+use Plot.Filled.AreaMode
+use Plot.Filled.HierarchyKind
 use Plot.Figure.Figure
 use STD.Math
 
@@ -60,6 +64,8 @@ func paint_chart(painter:&Canvas.Painter, chart:Chart, cell:Area) {
         Canvas.Fill.solid(Color.slate_50())
     )
     if chart.is_empty() { return }
+    if chart.is_circular() { paint_circular(painter, chart, cell); return }
+    if chart.is_hierarchy() { paint_hierarchy(painter, chart, cell); return }
     let title_height = 36.0
     let legend_placement = chart.legend_placement(cell.width)
     var legend_width = 0.0
@@ -74,6 +80,7 @@ func paint_chart(painter:&Canvas.Painter, chart:Chart, cell:Area) {
     paint_grid(painter, chart, bounds, area)
     paint_heatmaps(painter, chart, bounds, area)
     paint_bands(painter, chart, bounds, area)
+    paint_areas(painter, chart, bounds, area)
     paint_bars(painter, chart, bounds, area)
     paint_histograms(painter, chart, bounds, area)
     paint_references(painter, chart, bounds, area)
@@ -84,6 +91,335 @@ func paint_chart(painter:&Canvas.Painter, chart:Chart, cell:Area) {
     paint_candles(painter, chart, bounds, area)
     paint_labels(painter, chart, cell, area, bounds)
     paint_legend(painter, chart, cell, area, legend_placement)
+}
+
+func paint_hierarchy(painter:&Canvas.Painter, chart:Chart, cell:Area) {
+    let series = chart.hierarchy()
+    let area = Area(left:cell.left + 40.0, top:cell.top + 48.0,
+        width:Math.max(cell.width - 80.0, 1.0), height:Math.max(cell.height - 80.0, 1.0))
+    if chart.heading() != "" {
+        painter.text(chart.heading(), Math.Vec2(area.left, cell.top + 8.0),
+            Canvas.TextStyle(size:18.0, color:Color.slate_900()))
+    }
+    let maximum = maximum_value(series.values)
+    let height = area.height / series.values.count() as float
+    var index = 0
+    while index < series.values.count() {
+        var row = index
+        if series.kind == HierarchyKind.pyramid() { row = series.values.count() - index - 1 }
+        let top = area.top + row as float * height
+        var top_width = series.values[index] / maximum * area.width
+        var bottom_width = top_width
+        if series.kind == HierarchyKind.pyramid() {
+            top_width = row as float / series.values.count() as float * area.width
+            bottom_width = (row + 1) as float / series.values.count() as float * area.width
+        } else if index + 1 < series.values.count() {
+            bottom_width = series.values[index + 1] / maximum * area.width
+        } else { bottom_width *= 0.72 }
+        var path = Canvas.Path()
+        path.move_to(Math.Vec2(area.left + (area.width - top_width) * 0.5, top))
+        if top_width > 0.0 {
+            path.line_to(Math.Vec2(area.left + (area.width + top_width) * 0.5, top))
+        }
+        path.line_to(Math.Vec2(area.left + (area.width + bottom_width) * 0.5, top + height))
+        path.line_to(Math.Vec2(area.left + (area.width - bottom_width) * 0.5, top + height))
+        path.close()
+        painter.fill(path, Canvas.Fill.solid(series_color(chart, index).with_alpha(chart.fill_opacity_amount())))
+        paint_hierarchy_label(painter, chart, index, area, top, height, Math.max(top_width, bottom_width), maximum)
+        index++
+    }
+}
+
+func paint_hierarchy_label(painter:&Canvas.Painter, chart:Chart, index:int, area:Area,
+    top:float, height:float, width:float, maximum:float) {
+    if chart.label_placement() == LabelPlacement.hidden() { return }
+    let series = chart.hierarchy()
+    var text = series.labels[index]
+    if chart.percentages_visible() { text += " " + percentage(series.values[index], maximum) }
+    var x = area.left + area.width * 0.5
+    var color = Color.white()
+    var alignment = Canvas.TextAlignment.center
+    if chart.label_placement() == LabelPlacement.outside() {
+        x += width * 0.5 + 10.0
+        color = Color.slate_700()
+        alignment = Canvas.TextAlignment.start
+    }
+    painter.text(text, Math.Vec2(x, top + height * 0.5 - 7.0), Canvas.TextStyle(
+        size:12.0, color:color, alignment:alignment, weight:Canvas.TextWeight.bold))
+}
+
+func paint_areas(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Area) {
+    let all = chart.areas()
+    if all.count() == 0 { return }
+    let first = all[0]
+    var lower = zeros(first.x.count())
+    let totals = area_totals(chart)
+    for series in all {
+        var upper:float[] = []
+        var index = 0
+        while index < series.y.count() {
+            var value = series.y[index]
+            if chart.area_mode() == AreaMode.normalized() { value /= Math.max(totals[index], 0.000001) }
+            if chart.area_mode() == AreaMode.overlaid() { upper.append(value) }
+            else { upper.append(lower[index] + value) }
+            index++
+        }
+        var path = area_path(chart, series.x, lower, upper, bounds, area)
+        painter.fill(path, Canvas.Fill.solid(series_color(chart, series.color).with_alpha(chart.fill_opacity_amount())))
+        painter.stroke(area_edge(chart, series.x, upper, bounds, area),
+            Canvas.Stroke(series_color(chart, series.color), 2.0)..cap = Canvas.StrokeCap.round..join = Canvas.StrokeJoin.round)
+        if chart.area_mode() != AreaMode.overlaid() { lower = upper }
+    }
+}
+
+func area_path(chart:Chart, x:float[], lower:float[], upper:float[], bounds:Bounds, area:Area) Canvas.Path {
+    var path = Canvas.Path()
+    append_area_edge(path, chart, x, upper, bounds, area)
+    append_area_edge_reverse(path, chart, x, lower, bounds, area)
+    path.close()
+    return path
+}
+
+func area_edge(chart:Chart, x:float[], y:float[], bounds:Bounds, area:Area) Canvas.Path {
+    var path = Canvas.Path()
+    append_area_edge(path, chart, x, y, bounds, area)
+    return path
+}
+
+func append_area_edge(path:Canvas.Path, chart:Chart, x:float[], y:float[], bounds:Bounds, area:Area) {
+    var previous = Math.Vec2()
+    var index = 0
+    while index < x.count() {
+        let point = Math.Vec2(plot_x(x[index], bounds, area, chart.horizontal_scale()),
+            plot_y(y[index], bounds, area, chart.vertical_scale()))
+        if index == 0 { path.move_to(point) }
+        else if chart.smoothing_enabled() {
+            let distance = (point.x - previous.x) / 3.0
+            path.cubic_to(Math.Vec2(previous.x + distance, previous.y),
+                Math.Vec2(point.x - distance, point.y), point)
+        } else { path.line_to(point) }
+        previous = point
+        index++
+    }
+}
+
+func append_area_edge_reverse(path:Canvas.Path, chart:Chart, x:float[], y:float[], bounds:Bounds, area:Area) {
+    var index = x.count() - 1
+    var previous = Math.Vec2(plot_x(x[index], bounds, area, chart.horizontal_scale()),
+        plot_y(y[index], bounds, area, chart.vertical_scale()))
+    path.line_to(previous)
+    index--
+    while index >= 0 {
+        let point = Math.Vec2(plot_x(x[index], bounds, area, chart.horizontal_scale()),
+            plot_y(y[index], bounds, area, chart.vertical_scale()))
+        if chart.smoothing_enabled() {
+            let distance = (previous.x - point.x) / 3.0
+            path.cubic_to(Math.Vec2(previous.x - distance, previous.y),
+                Math.Vec2(point.x + distance, point.y), point)
+        } else { path.line_to(point) }
+        previous = point
+        index--
+    }
+}
+
+func area_totals(chart:Chart) float[] {
+    let all = chart.areas()
+    let first = all[0]
+    var result = zeros(first.x.count())
+    for series in all {
+        var index = 0
+        while index < result.count() { result[index] += series.y[index]; index++ }
+    }
+    return result
+}
+
+func zeros(count:int) float[] {
+    var result:float[] = []
+    var index = 0
+    while index < count { result.append(0.0); index++ }
+    return result
+}
+
+func maximum_value(values:float[]) float {
+    var result = values[0]
+    for value in values { result = Math.max(result, value) }
+    return result
+}
+
+func paint_circular(painter:&Canvas.Painter, chart:Chart, cell:Area) {
+    let series = chart.circular()
+    let placement = chart.legend_placement(cell.width)
+    var legend_width = 0.0
+    if placement == LegendPlacement.right() { legend_width = 176.0 }
+    let area = Area(
+        left:cell.left + 24.0,
+        top:cell.top + 42.0,
+        width:Math.max(cell.width - 48.0 - legend_width, 1.0),
+        height:Math.max(cell.height - 66.0, 1.0)
+    )
+    let center = Math.Vec2(area.left + area.width * 0.5, area.top + area.height * 0.5)
+    var radius = Math.min(area.width, area.height) * 0.40
+    if chart.label_placement() == LabelPlacement.outside() { radius *= 0.78 }
+    let inner = radius * chart.inner_radius_amount()
+    let start_angle = degrees(chart.start_angle_degrees())
+    let gap = degrees(chart.slice_gap_degrees())
+    if chart.heading() != "" {
+        painter.text(chart.heading(), Math.Vec2(area.left, cell.top + 8.0), Canvas.TextStyle(
+            size:18.0,
+            color:Color.slate_900()
+        ))
+    }
+    if series.kind == Kind.gauge() {
+        painter.fill(
+            annular_sector(center, radius, inner, start_angle, Math.two_pi() - 0.0001),
+            Canvas.Fill.solid(Color.slate_200())
+        )
+    }
+    var angle = start_angle
+    var index = 0
+    while index < series.values.count() {
+        var sweep = Math.two_pi() * series.values[index] / series.maximum
+        var outer = radius
+        if series.kind == Kind.polar_bar() {
+            sweep = Math.two_pi() / series.values.count() as float
+            outer = radius * series.values[index] / series.maximum
+        }
+        let visible = Math.max(sweep - gap, 0.0001)
+        let visible_start = angle + gap * 0.5
+        let middle = visible_start + visible * 0.5
+        let offset = chart.slice_offsets()[index] * radius
+        let slice_center = center.add(Math.Vec2(Math.cos(middle) * offset, Math.sin(middle) * offset))
+        painter.fill(
+            annular_sector(
+                slice_center,
+                outer,
+                Math.min(inner, outer * 0.9),
+                visible_start,
+                Math.min(visible, Math.two_pi() - 0.0001)
+            ),
+            Canvas.Fill.solid(series_color(chart, index))
+        )
+        if series.kind != Kind.gauge() {
+            paint_circular_label(
+                painter,
+                chart,
+                index,
+                slice_center,
+                inner,
+                outer,
+                middle,
+                placement != LegendPlacement.hidden()
+            )
+        }
+        angle += sweep
+        index++
+    }
+    if series.kind == Kind.gauge() {
+        let displayed_percentage = percentage(series.values[0], series.maximum)
+        painter.text(displayed_percentage, Math.Vec2(center.x, center.y - 14.0), Canvas.TextStyle(
+            size:28.0,
+            color:Color.slate_900(),
+            alignment:Canvas.TextAlignment.center,
+            weight:Canvas.TextWeight.bold
+        ))
+        if series.labels[0] != "" {
+            painter.text(series.labels[0], Math.Vec2(center.x, center.y + 18.0), Canvas.TextStyle(
+                size:12.0,
+                color:Color.slate_500(),
+                alignment:Canvas.TextAlignment.center
+            ))
+        }
+    }
+    paint_legend(painter, chart, cell, area, placement)
+}
+
+func annular_sector(
+    center:Math.Vec2,
+    outer:float,
+    inner:float,
+    start:float,
+    sweep:float
+) Canvas.Path {
+    let segments = 48
+    var path = Canvas.Path()
+    var step = 0
+    while step <= segments {
+        let angle = start + sweep * step as float / segments as float
+        let point = center.add(Math.Vec2(Math.cos(angle) * outer, Math.sin(angle) * outer))
+        if step == 0 { path.move_to(point) } else { path.line_to(point) }
+        step++
+    }
+    if inner > 0.0 {
+        step = segments
+        while step >= 0 {
+            let angle = start + sweep * step as float / segments as float
+            path.line_to(center.add(Math.Vec2(Math.cos(angle) * inner, Math.sin(angle) * inner)))
+            step--
+        }
+    } else {
+        path.line_to(center)
+    }
+    path.close()
+    return path
+}
+
+func paint_circular_label(
+    painter:&Canvas.Painter,
+    chart:Chart,
+    index:int,
+    center:Math.Vec2,
+    inner:float,
+    outer:float,
+    angle:float,
+    legend_visible:bool
+) {
+    if chart.label_placement() == LabelPlacement.hidden() { return }
+    let text = circular_label(chart, index, legend_visible)
+    if text == "" { return }
+    if chart.label_placement() == LabelPlacement.inside() {
+        let radius = inner + (outer - inner) * 0.58
+        painter.text(text, center.add(Math.Vec2(
+            Math.cos(angle) * radius,
+            Math.sin(angle) * radius - 7.0
+        )), Canvas.TextStyle(
+            size:12.0,
+            color:Color.white(),
+            alignment:Canvas.TextAlignment.center,
+            weight:Canvas.TextWeight.bold
+        ))
+        return
+    }
+    let edge = center.add(Math.Vec2(Math.cos(angle) * (outer + 3.0), Math.sin(angle) * (outer + 3.0)))
+    let label = center.add(Math.Vec2(Math.cos(angle) * (outer + 28.0), Math.sin(angle) * (outer + 28.0)))
+    painter.stroke(Canvas.Line(edge, label), Canvas.Stroke(Color.slate_400(), 1.0))
+    var alignment = Canvas.TextAlignment.start
+    var shift = 4.0
+    if Math.cos(angle) < 0.0 { alignment = Canvas.TextAlignment.end; shift = -4.0 }
+    painter.text(text, Math.Vec2(label.x + shift, label.y - 7.0), Canvas.TextStyle(
+        size:12.0,
+        color:Color.slate_700(),
+        alignment:alignment
+    ))
+}
+
+func circular_label(chart:Chart, index:int, legend_visible:bool) str {
+    let series = chart.circular()
+    var result = series.labels[index]
+    if chart.percentages_visible() {
+        let amount = percentage(series.values[index], series.maximum)
+        if legend_visible || result == "" { return amount }
+        result += " " + amount
+    }
+    return result
+}
+
+func degrees(value:float) float { return value / 180.0 * Math.pi() }
+
+func percentage(value:float, maximum:float) str {
+    let amount = value / maximum * 100.0
+    let rounded = Math.round(amount)
+    if Math.abs(amount - rounded) < 0.001 { return "$(rounded as int)%" }
+    return format_tick(amount, 1) + "%"
 }
 
 func paint_grid(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Area) {
@@ -179,7 +515,7 @@ func paint_bands(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Area)
             index--
         }
         path.close()
-        painter.fill(path, Canvas.Fill.solid(series_color(series.color).with_alpha(0.2)))
+        painter.fill(path, Canvas.Fill.solid(series_color(chart, series.color).with_alpha(0.2)))
     }
 }
 
@@ -202,7 +538,7 @@ func paint_bars(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Area) 
             if width > 1.0 && bar_height > 0.0 {
                 painter.fill(
                     Canvas.Rect(Math.Vec2(left, Math.min(zero, value)), Math.Vec2(width - 1.0, bar_height)),
-                    Canvas.Fill.solid(series_color(series.color))
+                    Canvas.Fill.solid(series_color(chart, series.color))
                 )
             }
             index++
@@ -222,7 +558,7 @@ func paint_histograms(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:
             if bottom > top {
                 painter.fill(
                     Canvas.Rect(Math.Vec2(left, top), Math.Vec2(Math.max(right - left - 1.0, 1.0), bottom - top)),
-                    Canvas.Fill.solid(series_color(series.color).with_alpha(0.82))
+                    Canvas.Fill.solid(series_color(chart, series.color).with_alpha(0.82))
                 )
             }
             index++
@@ -261,14 +597,14 @@ func paint_lines(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Area)
             index++
         }
         if series.x.count() > 1 {
-            painter.stroke(path, Canvas.Stroke(series_color(series.color), 3.0)
+            painter.stroke(path, Canvas.Stroke(series_color(chart, series.color), 3.0)
                 ..cap = Canvas.StrokeCap.round
                 ..join = Canvas.StrokeJoin.round)
         } else {
             painter.fill(Canvas.Circle(Math.Vec2(
                 plot_x(series.x[0], bounds, area, chart.horizontal_scale()),
                 plot_y(series.y[0], bounds, area, chart.vertical_scale())
-            ), 4.5), Canvas.Fill.solid(series_color(series.color)))
+            ), 4.5), Canvas.Fill.solid(series_color(chart, series.color)))
         }
     }
 }
@@ -280,7 +616,7 @@ func paint_scatters(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Ar
             painter.fill(Canvas.Circle(Math.Vec2(
                 plot_x(series.x[index], bounds, area, chart.horizontal_scale()),
                 plot_y(series.y[index], bounds, area, chart.vertical_scale())
-            ), 4.5), Canvas.Fill.solid(series_color(series.color)))
+            ), 4.5), Canvas.Fill.solid(series_color(chart, series.color)))
             index++
         }
     }
@@ -288,7 +624,7 @@ func paint_scatters(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Ar
 
 func paint_errors(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Area) {
     for series in chart.errors() {
-        let stroke = Canvas.Stroke(series_color(series.color), 2.0)
+        let stroke = Canvas.Stroke(series_color(chart, series.color), 2.0)
         var index = 0
         while index < series.x.count() {
             let x = plot_x(series.x[index], bounds, area, chart.horizontal_scale())
@@ -297,7 +633,7 @@ func paint_errors(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Area
             painter.stroke(Canvas.Line(Math.Vec2(x, low), Math.Vec2(x, high)), stroke)
             painter.stroke(Canvas.Line(Math.Vec2(x - 5.0, low), Math.Vec2(x + 5.0, low)), stroke)
             painter.stroke(Canvas.Line(Math.Vec2(x - 5.0, high), Math.Vec2(x + 5.0, high)), stroke)
-            painter.fill(Canvas.Circle(Math.Vec2(x, plot_y(series.y[index], bounds, area, chart.vertical_scale())), 3.5), Canvas.Fill.solid(series_color(series.color)))
+            painter.fill(Canvas.Circle(Math.Vec2(x, plot_y(series.y[index], bounds, area, chart.vertical_scale())), 3.5), Canvas.Fill.solid(series_color(chart, series.color)))
             index++
         }
     }
@@ -314,10 +650,10 @@ func paint_boxes(painter:&Canvas.Painter, chart:Chart, bounds:Bounds, area:Area)
         let median = plot_y(series.median, bounds, area, chart.vertical_scale())
         let q3 = plot_y(series.third_quartile, bounds, area, chart.vertical_scale())
         let maximum = plot_y(series.maximum, bounds, area, chart.vertical_scale())
-        let stroke = Canvas.Stroke(series_color(series.color), 2.0)
+        let stroke = Canvas.Stroke(series_color(chart, series.color), 2.0)
         painter.stroke(Canvas.Line(Math.Vec2(x, minimum), Math.Vec2(x, maximum)), stroke)
         if q1 > q3 {
-            painter.fill(Canvas.Rect(Math.Vec2(x - width * 0.5, q3), Math.Vec2(width, q1 - q3)), Canvas.Fill.solid(series_color(series.color).with_alpha(0.18)))
+            painter.fill(Canvas.Rect(Math.Vec2(x - width * 0.5, q3), Math.Vec2(width, q1 - q3)), Canvas.Fill.solid(series_color(chart, series.color).with_alpha(0.18)))
             painter.stroke(Canvas.Rect(Math.Vec2(x - width * 0.5, q3), Math.Vec2(width, q1 - q3)), stroke)
         }
         painter.stroke(Canvas.Line(Math.Vec2(x - width * 0.5, median), Math.Vec2(x + width * 0.5, median)), stroke)
@@ -391,7 +727,7 @@ func paint_legend(
         var index = 0
         while index < entries.count() {
             let entry = entries[index]
-            paint_legend_symbol(painter, entry, left, top)
+            paint_legend_symbol(painter, chart, entry, left, top)
             painter.text(
                 entry.label,
                 Math.Vec2(left + 32.0, top - 7.0),
@@ -412,7 +748,7 @@ func paint_legend(
     while index < entries.count() {
         let entry = entries[index]
         let y = top + 13.0 + index as float * 22.0
-        paint_legend_symbol(painter, entry, left, y)
+        paint_legend_symbol(painter, chart, entry, left, y)
         painter.text(entry.label, Math.Vec2(left + 38.0, y - 7.0), Canvas.TextStyle(size:12.0, color:Color.slate_800()))
         index++
     }
@@ -431,8 +767,8 @@ func inline_legend_left(chart:Chart, cell:Area, area:Area) float {
     return minimum
 }
 
-func paint_legend_symbol(painter:&Canvas.Painter, entry:LegendEntry, left:float, y:float) {
-    let color = series_color(entry.color)
+func paint_legend_symbol(painter:&Canvas.Painter, chart:Chart, entry:LegendEntry, left:float, y:float) {
+    let color = series_color(chart, entry.color)
     if entry.kind == MarkKind.scatter() {
         painter.fill(Canvas.Circle(Math.Vec2(left + 19.0, y), 4.0), Canvas.Fill.solid(color))
         return
@@ -449,7 +785,7 @@ func paint_legend_symbol(painter:&Canvas.Painter, entry:LegendEntry, left:float,
         painter.fill(Canvas.Rect(Math.Vec2(left + 10.0, y - 5.0), Math.Vec2(18.0, 10.0)), Canvas.Fill.solid(color))
         return
     }
-    if entry.kind == MarkKind.band() {
+    if entry.kind == MarkKind.band() || entry.kind == MarkKind.area() {
         painter.fill(Canvas.Rect(Math.Vec2(left + 9.0, y - 5.0), Math.Vec2(20.0, 10.0)), Canvas.Fill.solid(color.with_alpha(0.24)))
         painter.stroke(Canvas.Line(Math.Vec2(left + 9.0, y), Math.Vec2(left + 29.0, y)), Canvas.Stroke(color, 2.0))
         return
@@ -467,6 +803,10 @@ func paint_legend_symbol(painter:&Canvas.Painter, entry:LegendEntry, left:float,
         painter.fill(Canvas.Rect(Math.Vec2(left + 22.0, y - 3.0), Math.Vec2(6.0, 6.0)), Canvas.Fill.solid(Color.rose_600()))
         return
     }
+    if entry.kind == MarkKind.sector() {
+        painter.fill(Canvas.Circle(Math.Vec2(left + 19.0, y), 6.0), Canvas.Fill.solid(color))
+        return
+    }
     painter.stroke(Canvas.Line(Math.Vec2(left + 9.0, y), Math.Vec2(left + 29.0, y)), Canvas.Stroke(color, 3.0))
 }
 
@@ -477,12 +817,7 @@ func inverse_tick(minimum:float, maximum:float, amount:float, scale:Scale) float
     return minimum + (maximum - minimum) * amount
 }
 
-func series_color(index:int) Color {
-    let palette = index % 6
-    if palette == 0 { return Color.blue_600() }
-    if palette == 1 { return Color.rose_500() }
-    if palette == 2 { return Color.emerald_600() }
-    if palette == 3 { return Color.amber_500() }
-    if palette == 4 { return Color.violet_600() }
-    return Color.cyan_600()
+func series_color(chart:Chart, index:int) Color {
+    let color = chart.palette_color(index)
+    return Color.bytes(color.red() as uint8, color.green() as uint8, color.blue() as uint8)
 }

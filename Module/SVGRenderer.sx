@@ -11,6 +11,10 @@ use Plot.Chart.legend_entry_width
 use Plot.Chart.plot_x
 use Plot.Chart.plot_y
 use Plot.Chart.tick_decimals
+use Plot.Circular.Kind
+use Plot.Circular.LabelPlacement
+use Plot.Filled.AreaMode
+use Plot.Filled.HierarchyKind
 use Plot.Figure.Figure
 use STD.Math
 use STD.Text
@@ -53,6 +57,8 @@ func chart_svg(chart:Chart, cell:Area, index:int) str {
     var result = "<g data-plot-panel=\"$(index)\">\n"
     result += "<rect x=\"$(cell.left)\" y=\"$(cell.top)\" width=\"$(cell.width)\" height=\"$(cell.height)\" rx=\"8\" fill=\"#f8fafc\"/>\n"
     if chart.is_empty() { return result + "</g>\n" }
+    if chart.is_circular() { return result + circular_svg(chart, cell) + "</g>\n" }
+    if chart.is_hierarchy() { return result + hierarchy_svg(chart, cell) + "</g>\n" }
     let title_height = 36.0
     let legend_placement = chart.legend_placement(cell.width)
     var legend_width = 0.0
@@ -67,6 +73,7 @@ func chart_svg(chart:Chart, cell:Area, index:int) str {
     result += grid_svg(chart, bounds, area)
     result += heatmaps_svg(chart, bounds, area)
     result += bands_svg(chart, bounds, area)
+    result += areas_svg(chart, bounds, area)
     result += bars_svg(chart, bounds, area)
     result += histograms_svg(chart, bounds, area)
     result += references_svg(chart, bounds, area)
@@ -79,6 +86,328 @@ func chart_svg(chart:Chart, cell:Area, index:int) str {
     result += legend_svg(chart, cell, area, legend_placement)
     result += "</g>\n"
     return result
+}
+
+func hierarchy_svg(chart:Chart, cell:Area) str {
+    let series = chart.hierarchy()
+    let area = Area(left:cell.left + 40.0, top:cell.top + 48.0,
+        width:Math.max(cell.width - 80.0, 1.0), height:Math.max(cell.height - 80.0, 1.0))
+    let maximum = maximum_value(series.values)
+    let height = area.height / series.values.count() as float
+    var kind = "funnel"
+    if series.kind == HierarchyKind.pyramid() { kind = "pyramid" }
+    var result = "<g data-plot-kind=\"$(kind)\">\n"
+    if chart.heading() != "" {
+        result += "<text x=\"$(area.left)\" y=\"$(cell.top + 26.0)\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#0f172a\">$(escape_xml(chart.heading()))</text>\n"
+    }
+    var index = 0
+    while index < series.values.count() {
+        var row = index
+        if series.kind == HierarchyKind.pyramid() { row = series.values.count() - index - 1 }
+        let top = area.top + row as float * height
+        var top_width = series.values[index] / maximum * area.width
+        var bottom_width = top_width
+        if series.kind == HierarchyKind.pyramid() {
+            top_width = row as float / series.values.count() as float * area.width
+            bottom_width = (row + 1) as float / series.values.count() as float * area.width
+        } else if index + 1 < series.values.count() {
+            bottom_width = series.values[index + 1] / maximum * area.width
+        } else { bottom_width *= 0.72 }
+        let left_top = area.left + (area.width - top_width) * 0.5
+        let right_top = area.left + (area.width + top_width) * 0.5
+        let left_bottom = area.left + (area.width - bottom_width) * 0.5
+        let right_bottom = area.left + (area.width + bottom_width) * 0.5
+        var points = "$(left_top),$(top)"
+        if top_width > 0.0 { points += " $(right_top),$(top)" }
+        points += " $(right_bottom),$(top + height) $(left_bottom),$(top + height)"
+        result += "<polygon data-plot-stage=\"$(index)\" points=\"$(points)\" fill=\"$(svg_color(chart, index))\" fill-opacity=\"$(chart.fill_opacity_amount())\"/>\n"
+        result += hierarchy_label_svg(chart, index, area, top, height, Math.max(top_width, bottom_width), maximum)
+        index++
+    }
+    return result + "</g>\n"
+}
+
+func hierarchy_label_svg(chart:Chart, index:int, area:Area, top:float, height:float,
+    width:float, maximum:float) str {
+    if chart.label_placement() == LabelPlacement.hidden() { return "" }
+    let series = chart.hierarchy()
+    var text = series.labels[index]
+    if chart.percentages_visible() { text += " " + percentage(series.values[index], maximum) }
+    var x = area.left + area.width * 0.5
+    var anchor = "middle"
+    var color = "white"
+    if chart.label_placement() == LabelPlacement.outside() {
+        x += width * 0.5 + 10.0
+        anchor = "start"
+        color = "#334155"
+    }
+    return "<text data-plot-stage-label=\"$(index)\" x=\"$(x)\" y=\"$(top + height * 0.5 + 4.0)\" text-anchor=\"$(anchor)\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"700\" fill=\"$(color)\">$(escape_xml(text))</text>\n"
+}
+
+func areas_svg(chart:Chart, bounds:Bounds, area:Area) str {
+    let all = chart.areas()
+    if all.count() == 0 { return "" }
+    let first = all[0]
+    var lower = zeros(first.x.count())
+    let totals = area_totals(chart)
+    var result = "<g data-plot-kind=\"area\" data-plot-area-mode=\"$(area_mode_name(chart.area_mode()))\">\n"
+    for series in all {
+        var upper:float[] = []
+        var index = 0
+        while index < series.y.count() {
+            var value = series.y[index]
+            if chart.area_mode() == AreaMode.normalized() { value /= Math.max(totals[index], 0.000001) }
+            if chart.area_mode() == AreaMode.overlaid() { upper.append(value) }
+            else { upper.append(lower[index] + value) }
+            index++
+        }
+        let color = svg_color(chart, series.color)
+        result += "<path d=\"$(area_path_data(chart, series.x, lower, upper, bounds, area))\" fill=\"$(color)\" fill-opacity=\"$(chart.fill_opacity_amount())\"/>\n"
+        result += "<path d=\"$(area_edge_data(chart, series.x, upper, bounds, area))\" fill=\"none\" stroke=\"$(color)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n"
+        if chart.area_mode() != AreaMode.overlaid() { lower = upper }
+    }
+    return result + "</g>\n"
+}
+
+func area_path_data(chart:Chart, x:float[], lower:float[], upper:float[], bounds:Bounds, area:Area) str {
+    var result = area_edge_data(chart, x, upper, bounds, area)
+    result += area_edge_reverse_data(chart, x, lower, bounds, area)
+    return result + " Z"
+}
+
+func area_edge_reverse_data(chart:Chart, x:float[], y:float[], bounds:Bounds, area:Area) str {
+    var result = ""
+    var index = x.count() - 1
+    var previous_x = plot_x(x[index], bounds, area, chart.horizontal_scale())
+    var previous_y = plot_y(y[index], bounds, area, chart.vertical_scale())
+    result += " L $(previous_x) $(previous_y)"
+    index--
+    while index >= 0 {
+        let px = plot_x(x[index], bounds, area, chart.horizontal_scale())
+        let py = plot_y(y[index], bounds, area, chart.vertical_scale())
+        if chart.smoothing_enabled() {
+            let distance = (previous_x - px) / 3.0
+            result += " C $(previous_x - distance) $(previous_y) $(px + distance) $(py) $(px) $(py)"
+        } else { result += " L $(px) $(py)" }
+        previous_x = px
+        previous_y = py
+        index--
+    }
+    return result
+}
+
+func area_edge_data(chart:Chart, x:float[], y:float[], bounds:Bounds, area:Area) str {
+    var result = ""
+    var previous_x = 0.0
+    var previous_y = 0.0
+    var index = 0
+    while index < x.count() {
+        let px = plot_x(x[index], bounds, area, chart.horizontal_scale())
+        let py = plot_y(y[index], bounds, area, chart.vertical_scale())
+        if index == 0 { result = "M $(px) $(py)" }
+        else if chart.smoothing_enabled() {
+            let distance = (px - previous_x) / 3.0
+            result += " C $(previous_x + distance) $(previous_y) $(px - distance) $(py) $(px) $(py)"
+        } else { result += " L $(px) $(py)" }
+        previous_x = px
+        previous_y = py
+        index++
+    }
+    return result
+}
+
+func area_totals(chart:Chart) float[] {
+    let all = chart.areas()
+    let first = all[0]
+    var result = zeros(first.x.count())
+    for series in all {
+        var index = 0
+        while index < result.count() { result[index] += series.y[index]; index++ }
+    }
+    return result
+}
+
+func zeros(count:int) float[] {
+    var result:float[] = []
+    var index = 0
+    while index < count { result.append(0.0); index++ }
+    return result
+}
+
+func maximum_value(values:float[]) float {
+    var result = values[0]
+    for value in values { result = Math.max(result, value) }
+    return result
+}
+
+func area_mode_name(mode:AreaMode) str {
+    if mode == AreaMode.stacked() { return "stacked" }
+    if mode == AreaMode.normalized() { return "normalized" }
+    return "overlaid"
+}
+
+func circular_svg(chart:Chart, cell:Area) str {
+    let series = chart.circular()
+    let placement = chart.legend_placement(cell.width)
+    var legend_width = 0.0
+    if placement == LegendPlacement.right() { legend_width = 176.0 }
+    let area = Area(
+        left:cell.left + 24.0,
+        top:cell.top + 42.0,
+        width:Math.max(cell.width - 48.0 - legend_width, 1.0),
+        height:Math.max(cell.height - 66.0, 1.0)
+    )
+    let center_x = area.left + area.width * 0.5
+    let center_y = area.top + area.height * 0.5
+    var radius = Math.min(area.width, area.height) * 0.40
+    if chart.label_placement() == LabelPlacement.outside() { radius *= 0.78 }
+    let inner = radius * chart.inner_radius_amount()
+    let start_angle = degrees(chart.start_angle_degrees())
+    let gap = degrees(chart.slice_gap_degrees())
+    var result = "<g data-plot-kind=\"$(circular_kind(series.kind))\">\n"
+    if chart.heading() != "" {
+        result += "<text x=\"$(area.left)\" y=\"$(cell.top + 26.0)\" font-family=\"sans-serif\" font-size=\"18\" fill=\"#0f172a\">$(escape_xml(chart.heading()))</text>\n"
+    }
+    if series.kind == Kind.gauge() {
+        result += annular_path(center_x, center_y, radius, inner, start_angle, Math.two_pi() - 0.0001, "#e2e8f0", "track")
+    }
+    var angle = start_angle
+    var index = 0
+    while index < series.values.count() {
+        var sweep = Math.two_pi() * series.values[index] / series.maximum
+        var outer = radius
+        if series.kind == Kind.polar_bar() {
+            sweep = Math.two_pi() / series.values.count() as float
+            outer = radius * series.values[index] / series.maximum
+        }
+        let visible = Math.max(sweep - gap, 0.0001)
+        let visible_start = angle + gap * 0.5
+        let middle = visible_start + visible * 0.5
+        let offset = chart.slice_offsets()[index] * radius
+        let slice_x = center_x + Math.cos(middle) * offset
+        let slice_y = center_y + Math.sin(middle) * offset
+        result += annular_path(
+            slice_x,
+            slice_y,
+            outer,
+            Math.min(inner, outer * 0.9),
+            visible_start,
+            Math.min(visible, Math.two_pi() - 0.0001),
+            svg_color(chart, index),
+            "$(index)"
+        )
+        if series.kind != Kind.gauge() {
+            result += circular_label_svg(
+                chart,
+                index,
+                slice_x,
+                slice_y,
+                inner,
+                outer,
+                middle,
+                placement != LegendPlacement.hidden()
+            )
+        }
+        angle += sweep
+        index++
+    }
+    if series.kind == Kind.gauge() {
+        let displayed_percentage = percentage(series.values[0], series.maximum)
+        result += "<text data-plot-gauge-value=\"true\" x=\"$(center_x)\" y=\"$(center_y + 7.0)\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"28\" font-weight=\"700\" fill=\"#0f172a\">$(displayed_percentage)</text>\n"
+        if series.labels[0] != "" {
+            result += "<text x=\"$(center_x)\" y=\"$(center_y + 29.0)\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#64748b\">$(escape_xml(series.labels[0]))</text>\n"
+        }
+    }
+    result += "</g>\n"
+    result += legend_svg(chart, cell, area, placement)
+    return result
+}
+
+func annular_path(
+    center_x:float,
+    center_y:float,
+    outer:float,
+    inner:float,
+    start:float,
+    sweep:float,
+    color:str,
+    slice:str
+) str {
+    let end = start + sweep
+    let outer_start_x = center_x + Math.cos(start) * outer
+    let outer_start_y = center_y + Math.sin(start) * outer
+    let outer_end_x = center_x + Math.cos(end) * outer
+    let outer_end_y = center_y + Math.sin(end) * outer
+    var large = 0
+    if sweep > Math.pi() { large = 1 }
+    var path = "M $(outer_start_x) $(outer_start_y) A $(outer) $(outer) 0 $(large) 1 $(outer_end_x) $(outer_end_y)"
+    if inner > 0.0 {
+        let inner_end_x = center_x + Math.cos(end) * inner
+        let inner_end_y = center_y + Math.sin(end) * inner
+        let inner_start_x = center_x + Math.cos(start) * inner
+        let inner_start_y = center_y + Math.sin(start) * inner
+        path += " L $(inner_end_x) $(inner_end_y) A $(inner) $(inner) 0 $(large) 0 $(inner_start_x) $(inner_start_y) Z"
+    } else {
+        path += " L $(center_x) $(center_y) Z"
+    }
+    return "<path data-plot-slice=\"$(slice)\" d=\"$(path)\" fill=\"$(color)\"/>\n"
+}
+
+func circular_label_svg(
+    chart:Chart,
+    index:int,
+    center_x:float,
+    center_y:float,
+    inner:float,
+    outer:float,
+    angle:float,
+    legend_visible:bool
+) str {
+    if chart.label_placement() == LabelPlacement.hidden() { return "" }
+    let series = chart.circular()
+    let text = circular_label(chart, index, legend_visible)
+    if text == "" { return "" }
+    if chart.label_placement() == LabelPlacement.inside() {
+        let radius = inner + (outer - inner) * 0.58
+        let x = center_x + Math.cos(angle) * radius
+        let y = center_y + Math.sin(angle) * radius
+        return "<text data-plot-slice-label=\"$(index)\" x=\"$(x)\" y=\"$(y + 4.0)\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"700\" fill=\"white\">$(escape_xml(text))</text>\n"
+    }
+    let edge_x = center_x + Math.cos(angle) * (outer + 3.0)
+    let edge_y = center_y + Math.sin(angle) * (outer + 3.0)
+    let label_x = center_x + Math.cos(angle) * (outer + 28.0)
+    let label_y = center_y + Math.sin(angle) * (outer + 28.0)
+    var anchor = "start"
+    var shift = 4.0
+    if Math.cos(angle) < 0.0 { anchor = "end"; shift = -4.0 }
+    return "<g data-plot-slice-label=\"$(index)\"><line x1=\"$(edge_x)\" y1=\"$(edge_y)\" x2=\"$(label_x)\" y2=\"$(label_y)\" stroke=\"#94a3b8\"/><text x=\"$(label_x + shift)\" y=\"$(label_y + 4.0)\" text-anchor=\"$(anchor)\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#334155\">$(escape_xml(text))</text></g>\n"
+}
+
+func circular_label(chart:Chart, index:int, legend_visible:bool) str {
+    let series = chart.circular()
+    var result = series.labels[index]
+    if chart.percentages_visible() {
+        let amount = percentage(series.values[index], series.maximum)
+        if legend_visible || result == "" { return amount }
+        result += " " + amount
+    }
+    return result
+}
+
+func circular_kind(kind:Kind) str {
+    if kind == Kind.pie() { return "pie" }
+    if kind == Kind.donut() { return "donut" }
+    if kind == Kind.gauge() { return "gauge" }
+    return "polar-bar"
+}
+
+func degrees(value:float) float { return value / 180.0 * Math.pi() }
+
+func percentage(value:float, maximum:float) str {
+    let amount = value / maximum * 100.0
+    let rounded = Math.round(amount)
+    if Math.abs(amount - rounded) < 0.001 { return "$(rounded as int)%" }
+    return format_tick(amount, 1) + "%"
 }
 
 func grid_svg(chart:Chart, bounds:Bounds, area:Area) str {
@@ -168,7 +497,7 @@ func bands_svg(chart:Chart, bounds:Bounds, area:Area) str {
             points += "$(plot_x(series.x[index], bounds, area, chart.horizontal_scale())),$(plot_y(series.lower[index], bounds, area, chart.vertical_scale())) "
             index--
         }
-        result += "<polygon data-plot-kind=\"band\" points=\"$(points)\" fill=\"$(svg_color(series.color))\" fill-opacity=\"0.20\"/>\n"
+        result += "<polygon data-plot-kind=\"band\" points=\"$(points)\" fill=\"$(svg_color(chart, series.color))\" fill-opacity=\"0.20\"/>\n"
     }
     return result
 }
@@ -190,7 +519,7 @@ func bars_svg(chart:Chart, bounds:Bounds, area:Area) str {
             let left = center - group_width * 0.5 + series_index as float * width
             let zero = plot_y(0.0, bounds, area, chart.vertical_scale())
             let value = plot_y(series.values[index], bounds, area, chart.vertical_scale())
-            result += "<rect x=\"$(left)\" y=\"$(Math.min(zero, value))\" width=\"$(width - 1.0)\" height=\"$(Math.abs(zero - value))\" fill=\"$(svg_color(series.color))\"/>\n"
+            result += "<rect x=\"$(left)\" y=\"$(Math.min(zero, value))\" width=\"$(width - 1.0)\" height=\"$(Math.abs(zero - value))\" fill=\"$(svg_color(chart, series.color))\"/>\n"
             index++
         }
         result += "</g>\n"
@@ -202,7 +531,7 @@ func bars_svg(chart:Chart, bounds:Bounds, area:Area) str {
 func histograms_svg(chart:Chart, bounds:Bounds, area:Area) str {
     var result = ""
     for series in chart.histograms() {
-        result += "<g data-plot-kind=\"histogram\" fill=\"$(svg_color(series.color))\" fill-opacity=\"0.82\">\n"
+        result += "<g data-plot-kind=\"histogram\" fill=\"$(svg_color(chart, series.color))\" fill-opacity=\"0.82\">\n"
         var index = 0
         while index < series.counts.count() {
             let left = plot_x(series.edges[index], bounds, area, chart.horizontal_scale())
@@ -236,7 +565,7 @@ func lines_svg(chart:Chart, bounds:Bounds, area:Area) str {
     var result = ""
     for series in chart.lines() {
         if series.x.count() == 1 {
-            result += "<circle data-plot-kind=\"line\" cx=\"$(plot_x(series.x[0], bounds, area, chart.horizontal_scale()))\" cy=\"$(plot_y(series.y[0], bounds, area, chart.vertical_scale()))\" r=\"4.5\" fill=\"$(svg_color(series.color))\"/>\n"
+            result += "<circle data-plot-kind=\"line\" cx=\"$(plot_x(series.x[0], bounds, area, chart.horizontal_scale()))\" cy=\"$(plot_y(series.y[0], bounds, area, chart.vertical_scale()))\" r=\"4.5\" fill=\"$(svg_color(chart, series.color))\"/>\n"
         } else {
             var points = ""
             var index = 0
@@ -245,7 +574,7 @@ func lines_svg(chart:Chart, bounds:Bounds, area:Area) str {
                 points += "$(plot_x(series.x[index], bounds, area, chart.horizontal_scale())),$(plot_y(series.y[index], bounds, area, chart.vertical_scale()))"
                 index++
             }
-            result += "<polyline data-plot-kind=\"line\" points=\"$(points)\" fill=\"none\" stroke=\"$(svg_color(series.color))\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n"
+            result += "<polyline data-plot-kind=\"line\" points=\"$(points)\" fill=\"none\" stroke=\"$(svg_color(chart, series.color))\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n"
         }
     }
     return result
@@ -254,7 +583,7 @@ func lines_svg(chart:Chart, bounds:Bounds, area:Area) str {
 func scatters_svg(chart:Chart, bounds:Bounds, area:Area) str {
     var result = ""
     for series in chart.scatters() {
-        result += "<g data-plot-kind=\"scatter\" fill=\"$(svg_color(series.color))\">\n"
+        result += "<g data-plot-kind=\"scatter\" fill=\"$(svg_color(chart, series.color))\">\n"
         var index = 0
         while index < series.x.count() {
             result += "<circle cx=\"$(plot_x(series.x[index], bounds, area, chart.horizontal_scale()))\" cy=\"$(plot_y(series.y[index], bounds, area, chart.vertical_scale()))\" r=\"4.5\"/>\n"
@@ -268,7 +597,7 @@ func scatters_svg(chart:Chart, bounds:Bounds, area:Area) str {
 func errors_svg(chart:Chart, bounds:Bounds, area:Area) str {
     var result = ""
     for series in chart.errors() {
-        result += "<g data-plot-kind=\"error-bars\" stroke=\"$(svg_color(series.color))\" stroke-width=\"2\" fill=\"$(svg_color(series.color))\">\n"
+        result += "<g data-plot-kind=\"error-bars\" stroke=\"$(svg_color(chart, series.color))\" stroke-width=\"2\" fill=\"$(svg_color(chart, series.color))\">\n"
         var index = 0
         while index < series.x.count() {
             let x = plot_x(series.x[index], bounds, area, chart.horizontal_scale())
@@ -295,7 +624,7 @@ func boxes_svg(chart:Chart, bounds:Bounds, area:Area) str {
         let median = plot_y(series.median, bounds, area, chart.vertical_scale())
         let q3 = plot_y(series.third_quartile, bounds, area, chart.vertical_scale())
         let maximum = plot_y(series.maximum, bounds, area, chart.vertical_scale())
-        let color = svg_color(series.color)
+        let color = svg_color(chart, series.color)
         result += "<g data-plot-kind=\"box-plot\" stroke=\"$(color)\" stroke-width=\"2\"><line x1=\"$(x)\" y1=\"$(minimum)\" x2=\"$(x)\" y2=\"$(maximum)\"/><rect x=\"$(x - width * 0.5)\" y=\"$(q3)\" width=\"$(width)\" height=\"$(q1 - q3)\" fill=\"$(color)\" fill-opacity=\"0.18\"/><line x1=\"$(x - width * 0.5)\" y1=\"$(median)\" x2=\"$(x + width * 0.5)\" y2=\"$(median)\"/><line x1=\"$(x - width * 0.25)\" y1=\"$(minimum)\" x2=\"$(x + width * 0.25)\" y2=\"$(minimum)\"/><line x1=\"$(x - width * 0.25)\" y1=\"$(maximum)\" x2=\"$(x + width * 0.25)\" y2=\"$(maximum)\"/></g>\n"
         index++
     }
@@ -363,7 +692,7 @@ func legend_svg(chart:Chart, cell:Area, area:Area, placement:LegendPlacement) st
         var index = 0
         while index < entries.count() {
             let entry = entries[index]
-            result += legend_symbol_svg(entry, left, y)
+            result += legend_symbol_svg(chart, entry, left, y)
             result += "<text x=\"$(left + 32.0)\" y=\"$(y + 4.0)\" fill=\"#1e293b\">$(escape_xml(entry.label))</text>\n"
             left += legend_entry_width(entry.label)
             index++
@@ -382,7 +711,7 @@ func legend_svg(chart:Chart, cell:Area, area:Area, placement:LegendPlacement) st
     while index < entries.count() {
         let entry = entries[index]
         let y = top + 13.0 + index as float * 22.0
-        result += legend_symbol_svg(entry, left, y)
+        result += legend_symbol_svg(chart, entry, left, y)
         result += "<text x=\"$(left + 38.0)\" y=\"$(y + 4.0)\" fill=\"#1e293b\">$(escape_xml(entry.label))</text>\n"
         index++
     }
@@ -402,8 +731,8 @@ func inline_legend_left(chart:Chart, cell:Area, area:Area) float {
     return minimum
 }
 
-func legend_symbol_svg(entry:LegendEntry, left:float, y:float) str {
-    let color = svg_color(entry.color)
+func legend_symbol_svg(chart:Chart, entry:LegendEntry, left:float, y:float) str {
+    let color = svg_color(chart, entry.color)
     if entry.kind == MarkKind.scatter() {
         return "<circle data-plot-legend-kind=\"scatter\" cx=\"$(left + 19.0)\" cy=\"$(y)\" r=\"4\" fill=\"$(color)\"/>\n"
     }
@@ -413,14 +742,19 @@ func legend_symbol_svg(entry:LegendEntry, left:float, y:float) str {
     if entry.kind == MarkKind.bar() || entry.kind == MarkKind.histogram() {
         return "<rect data-plot-legend-kind=\"bar\" x=\"$(left + 10.0)\" y=\"$(y - 5.0)\" width=\"18\" height=\"10\" fill=\"$(color)\"/>\n"
     }
-    if entry.kind == MarkKind.band() {
-        return "<g data-plot-legend-kind=\"band\"><rect x=\"$(left + 9.0)\" y=\"$(y - 5.0)\" width=\"20\" height=\"10\" fill=\"$(color)\" fill-opacity=\"0.24\"/><line x1=\"$(left + 9.0)\" y1=\"$(y)\" x2=\"$(left + 29.0)\" y2=\"$(y)\" stroke=\"$(color)\" stroke-width=\"2\"/></g>\n"
+    if entry.kind == MarkKind.band() || entry.kind == MarkKind.area() {
+        var kind = "band"
+        if entry.kind == MarkKind.area() { kind = "area" }
+        return "<g data-plot-legend-kind=\"$(kind)\"><rect x=\"$(left + 9.0)\" y=\"$(y - 5.0)\" width=\"20\" height=\"10\" fill=\"$(color)\" fill-opacity=\"0.24\"/><line x1=\"$(left + 9.0)\" y1=\"$(y)\" x2=\"$(left + 29.0)\" y2=\"$(y)\" stroke=\"$(color)\" stroke-width=\"2\"/></g>\n"
     }
     if entry.kind == MarkKind.box_plot() {
         return "<rect data-plot-legend-kind=\"box-plot\" x=\"$(left + 12.0)\" y=\"$(y - 6.0)\" width=\"14\" height=\"12\" fill=\"$(color)\" fill-opacity=\"0.18\" stroke=\"$(color)\" stroke-width=\"2\"/>\n"
     }
     if entry.kind == MarkKind.candlesticks() {
         return "<g data-plot-legend-kind=\"candlesticks\"><line x1=\"$(left + 15.0)\" y1=\"$(y - 7.0)\" x2=\"$(left + 15.0)\" y2=\"$(y + 7.0)\" stroke=\"#059669\" stroke-width=\"2\"/><rect x=\"$(left + 11.0)\" y=\"$(y - 4.0)\" width=\"8\" height=\"8\" fill=\"#059669\"/><line x1=\"$(left + 25.0)\" y1=\"$(y - 6.0)\" x2=\"$(left + 25.0)\" y2=\"$(y + 6.0)\" stroke=\"#e11d48\" stroke-width=\"2\"/><rect x=\"$(left + 22.0)\" y=\"$(y - 3.0)\" width=\"6\" height=\"6\" fill=\"#e11d48\"/></g>\n"
+    }
+    if entry.kind == MarkKind.sector() {
+        return "<circle data-plot-legend-kind=\"sector\" cx=\"$(left + 19.0)\" cy=\"$(y)\" r=\"6\" fill=\"$(color)\"/>\n"
     }
     return "<line data-plot-legend-kind=\"line\" x1=\"$(left + 9.0)\" y1=\"$(y)\" x2=\"$(left + 29.0)\" y2=\"$(y)\" stroke=\"$(color)\" stroke-width=\"3\"/>\n"
 }
@@ -432,14 +766,9 @@ func inverse_tick(minimum:float, maximum:float, amount:float, scale:Scale) float
     return minimum + (maximum - minimum) * amount
 }
 
-func svg_color(index:int) str {
-    let palette = index % 6
-    if palette == 0 { return "#155dfc" }
-    if palette == 1 { return "#f6339a" }
-    if palette == 2 { return "#009966" }
-    if palette == 3 { return "#fe9a00" }
-    if palette == 4 { return "#7f22fe" }
-    return "#0092b8"
+func svg_color(chart:Chart, index:int) str {
+    let color = chart.palette_color(index)
+    return "rgb($(color.red()) $(color.green()) $(color.blue()))"
 }
 
 func heat_color(amount:float) str {

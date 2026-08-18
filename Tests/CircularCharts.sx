@@ -1,0 +1,64 @@
+use Plot
+use STD.Text
+
+test "render a labeled pie with percentages and a custom palette" {
+    let svg = Plot.pie(["Produit", "Services", "Support"], [52.0, 31.0, 17.0])
+        ..palette(Plot.Palette([
+            Plot.Color.rgb(13, 148, 136),
+            Plot.Color.rgb(245, 158, 11),
+            Plot.Color.rgb(239, 108, 91)
+        ]))
+        ..show_percentages()
+        .svg()
+
+    assert(Text.contains(svg, "data-plot-kind=\"pie\""), "pie group")
+    assert(Text.contains(svg, "data-plot-slice=\"0\""), "first pie slice")
+    assert(Text.contains(svg, "data-plot-slice=\"2\""), "last pie slice")
+    assert(Text.contains(svg, "rgb(13 148 136)"), "custom palette")
+    assert(Text.contains(svg, ">52%</text>"), "percentage label")
+    assert(!Text.contains(svg, "Produit 52%"), "legend avoids repeated category names")
+}
+
+test "render an exploded donut with outside labels" {
+    let svg = Plot.donut(["Silex", "GFX", "STD"], [45.0, 35.0, 20.0])
+        ..slice_gap(1.0)
+        ..explode(1, 0.12)
+        ..labels_outside()
+        ..show_percentages()
+        .svg()
+
+    assert(Text.contains(svg, "data-plot-kind=\"donut\""), "donut group")
+    assert(Text.contains(svg, "data-plot-slice-label=\"1\""), "outside slice label")
+    assert(Text.contains(svg, ">35%</text>"), "outside percentage content")
+    assert(!Text.contains(svg, "GFX 35%"), "outside label avoids legend duplication")
+    assert(Text.contains(svg, "data-plot-legend-kind=\"sector\""), "sector legend symbols")
+}
+
+test "render a gauge with its track and centered percentage" {
+    let svg = Plot.gauge(75.0, 100.0, "Objectif")
+        ..palette(Plot.Palette.ocean())
+        .svg()
+
+    assert(Text.contains(svg, "data-plot-kind=\"gauge\""), "gauge group")
+    assert(Text.contains(svg, "data-plot-slice=\"track\""), "gauge track")
+    assert(Text.contains(svg, "data-plot-gauge-value=\"true\""), "gauge value")
+    assert(Text.contains(svg, ">75%</text>"), "centered percentage")
+    assert(Text.contains(svg, "Objectif"), "gauge label")
+
+    let empty = Plot.gauge(0.0, 100.0).svg()
+    assert(Text.contains(empty, ">0%</text>"), "zero remains a valid gauge value")
+}
+
+test "render radial bars with independent radii" {
+    let svg = Plot.polar_bar(["API", "Tests", "Docs", "Perf"], [82.0, 71.0, 64.0, 91.0], 100.0)
+        ..palette(Plot.Palette.neon())
+        ..slice_gap(1.0)
+        ..labels_outside()
+        ..show_percentages()
+        .svg()
+
+    assert(Text.contains(svg, "data-plot-kind=\"polar-bar\""), "polar bar group")
+    assert(Text.contains(svg, "data-plot-slice=\"3\""), "four radial bars")
+    assert(Text.contains(svg, "rgb(34 211 238)"), "neon palette")
+    assert(Text.contains(svg, ">91%</text>"), "radial percentage")
+}

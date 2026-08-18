@@ -1,5 +1,7 @@
 public use Plot.Chart.Chart
 public use Plot.Figure.Figure
+public use Plot.Style.Color
+public use Plot.Style.Palette
 
 public func grid(rows:int, columns:int) Figure {
     return Figure(rows, columns)
@@ -11,6 +13,18 @@ public func line(x:float[], y:float[], label:str = "") Figure {
 
 public func scatter(x:float[], y:float[], label:str = "") Figure {
     return Figure()..scatter(x, y, label)
+}
+
+public func area(x:float[], y:float[], label:str = "") Figure {
+    return Figure()..area(x, y, label)
+}
+
+public func stacked_area(x:float[], values:float[][], labels:str[] = []) Figure {
+    return Figure()..stacked_area(x, values, labels)
+}
+
+public func normalized_area(x:float[], values:float[][], labels:str[] = []) Figure {
+    return Figure()..normalized_area(x, values, labels)
 }
 
 public func bar(categories:str[], values:float[], label:str = "") Figure {
@@ -52,4 +66,28 @@ public func candlesticks(
     label:str = ""
 ) Figure {
     return Figure()..candlesticks(x, open, high, low, close, label)
+}
+
+public func pie(labels:str[], values:float[]) Figure {
+    return Figure()..pie(labels, values)
+}
+
+public func donut(labels:str[], values:float[]) Figure {
+    return Figure()..donut(labels, values)
+}
+
+public func gauge(value:float, maximum:float = 100.0, label:str = "") Figure {
+    return Figure()..gauge(value, maximum, label)
+}
+
+public func polar_bar(labels:str[], values:float[], maximum:float = 0.0) Figure {
+    return Figure()..polar_bar(labels, values, maximum)
+}
+
+public func pyramid(labels:str[], values:float[]) Figure {
+    return Figure()..pyramid(labels, values)
+}
+
+public func funnel(labels:str[], values:float[]) Figure {
+    return Figure()..funnel(labels, values)
 }

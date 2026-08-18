@@ -29,7 +29,7 @@ test "compose line and scatter series in one figure" {
     assert(Text.contains(svg, "height=\"420\""), "configured height")
     assert(Text.contains(svg, "<polyline"), "line series")
     assert(Text.contains(svg, "<circle"), "scatter series")
-    assert(Text.contains(svg, "r=\"4\" fill=\"#f6339a\""), "scatter legend marker")
+    assert(Text.contains(svg, "r=\"4\" fill=\"rgb(45 212 191)\""), "scatter legend marker")
     assert(Text.contains(svg, "data-plot-legend=\"inline\""), "compact inline legend")
     assert(Text.contains(svg, "Modèle"), "first legend entry")
     assert(Text.contains(svg, "Mesures"), "second legend entry")

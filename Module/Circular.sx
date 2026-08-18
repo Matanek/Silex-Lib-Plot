@@ -1,0 +1,19 @@
+package enum Kind {
+    pie
+    donut
+    gauge
+    polar_bar
+}
+
+package enum LabelPlacement {
+    hidden
+    inside
+    outside
+}
+
+package struct Series {
+    let labels:str[]
+    let values:float[]
+    let maximum:float
+    let kind:Kind
+}

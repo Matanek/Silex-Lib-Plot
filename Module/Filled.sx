@@ -1,0 +1,23 @@
+package enum AreaMode {
+    overlaid
+    stacked
+    normalized
+}
+
+package struct AreaSeries {
+    let x:float[]
+    let y:float[]
+    let label:str
+    let color:int
+}
+
+package enum HierarchyKind {
+    pyramid
+    funnel
+}
+
+package struct HierarchySeries {
+    let labels:str[]
+    let values:float[]
+    let kind:HierarchyKind
+}

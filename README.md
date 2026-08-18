@@ -55,12 +55,19 @@ let summary = Plot.box_plot(before, "Avant")..box_plot(after, "Après")
 Plot supports:
 
 - `line(x, y)` and `scatter(x, y)` for models, signals, and observations;
+- `area(x, y)`, `stacked_area(x, values)`, and `normalized_area(x, values)`
+  for translucent mountains, cumulative volumes, and changing proportions;
 - `bar(categories, values)` and `histogram(values, bins)` for comparisons and
   distributions;
 - `heatmap(values, columns)` for matrices, correlations, and confusion data;
 - `band(x, lower, upper)` and `error_bars(x, y, lower, upper)` for uncertainty;
 - `box_plot(values)` for robust distribution summaries;
 - `candlesticks(x, open, high, low, close)` for OHLC market data;
+- `pie(labels, values)` and `donut(labels, values)` for proportions;
+- `gauge(value, maximum)` for progress and compact indicators;
+- `polar_bar(labels, values, maximum)` for radial comparisons;
+- `pyramid(labels, values)` and `funnel(labels, values)` for levels and staged
+  progression;
 - `horizontal(value)` and `vertical(value)` for thresholds and references;
 - `x_log()` and `y_log()` for logarithmic scales;
 - `x_decimals(n)` and `y_decimals(n)` when an axis needs an explicit maximum
@@ -69,6 +76,89 @@ Plot supports:
 Heatmaps accept a flattened row-major array. The number of rows is inferred
 from `values.count() / columns`. Every input is checked for compatible lengths,
 finite values, and domain errors before rendering.
+
+## Circular charts and visual style
+
+Circular charts start with modern defaults and remain customizable through the
+same cascade vocabulary as the rest of Plot:
+
+```sx
+let share = Plot.donut(
+    ["Produit", "Services", "Support"],
+    [52.0, 31.0, 17.0]
+)
+    ..title("Répartition du revenu")
+    ..palette(Plot.Palette.ocean())
+    ..inner_radius(0.58)
+    ..labels_outside()
+    ..show_percentages()
+```
+
+`Plot.Palette.modern()`, `Plot.Palette.ocean()`, `Plot.Palette.sunset()`, and
+`Plot.Palette.neon()` provide coordinated defaults. A report can define its own
+identity without depending on GFX:
+
+```sx
+let brand = Plot.Palette([
+    Plot.Color.rgb(13, 148, 136),
+    Plot.Color.rgb(245, 158, 11),
+    Plot.Color.rgb(239, 108, 91)
+])
+```
+
+Labels may be hidden, placed inside, or placed outside with leader lines. When
+a legend already names the categories, percentage labels omit those repeated
+names automatically. Circular sectors are joint by default; `slice_gap` and
+`explode` are deliberate opt-in effects.
+`start_angle(degrees)`, `slice_gap(degrees)`, `inner_radius(amount)`, and
+`explode(index, amount)` cover deliberate composition changes while keeping
+arc and path construction private to Plot. Palettes also apply to Cartesian
+series, so one visual identity works across a complete dashboard.
+
+## Filled areas, pyramids, and funnels
+
+Areas compose through the same chart vocabulary as lines. Independent areas
+are overlaid with transparent fills; stacked and normalized areas accept the
+series together so Plot can calculate their baselines safely:
+
+```sx
+let activity = Plot.area(months, product, "Produit")
+    ..area(months, services, "Services")
+    ..fill_opacity(0.30)
+    ..smooth()
+
+let mix = Plot.normalized_area(
+    months,
+    [product, services, support],
+    ["Produit", "Services", "Support"]
+)
+```
+
+`smooth()` rounds the visible upper contours while `straight()` restores
+linear segments. `fill_opacity(amount)` controls the fill without weakening
+the contour or legend symbol. Stacked and normalized values must be finite and
+non-negative; all their series share the same x coordinates.
+
+Pyramids express levels from the broad foundation to the apex. Funnels express
+stages from top to bottom and preserve the order supplied by the caller:
+
+```sx
+let priorities = Plot.pyramid(
+    ["Socle", "Produit", "Adoption", "Vision"],
+    [100.0, 74.0, 45.0, 20.0]
+)
+    ..show_percentages()
+
+let conversion = Plot.funnel(
+    ["Visites", "Essais", "Comptes", "Clients"],
+    [1200.0, 640.0, 310.0, 96.0]
+)
+    ..labels_outside()
+```
+
+The user selects the comparison or progression they want to communicate; SVG
+paths, polygons, stacking baselines, and native canvas geometry remain private
+to Plot.
 
 ## Multiple charts
 
@@ -158,7 +248,10 @@ silex link .
 silex test Tests
 silex compile Examples/Quadratic.sx -o quadratic
 silex compile Examples/ScientificDashboard.sx -o scientific-dashboard
+silex compile Examples/CircularGallery.sx -o circular-gallery
+silex compile Examples/FilledGallery.sx -o filled-gallery
 ```
 
 The examples cover a line/scatter comparison, scientific and AI monitoring,
-benchmark reporting, and financial OHLC data.
+benchmark reporting, financial OHLC data, a customizable circular dashboard,
+and a gallery of filled areas and progression shapes.

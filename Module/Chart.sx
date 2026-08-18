@@ -1,5 +1,14 @@
 use STD.Math
 use STD.Text.Grapheme
+use Plot.Circular.Kind
+use Plot.Circular.LabelPlacement
+use Plot.Circular.Series
+use Plot.Filled.AreaMode
+use Plot.Filled.AreaSeries
+use Plot.Filled.HierarchyKind
+use Plot.Filled.HierarchySeries
+use Plot.Style.Color
+use Plot.Style.Palette
 
 package enum Scale {
     linear
@@ -30,6 +39,8 @@ package enum MarkKind {
     error_bars
     box_plot
     candlesticks
+    sector
+    area
 }
 
 package struct XYSeries {
@@ -131,6 +142,9 @@ public class Chart {
     private var current_errors:ErrorSeries[]
     private var current_boxes:BoxSeries[]
     private var current_candles:CandleSeries[]
+    private var current_areas:AreaSeries[]
+    private var current_circular:Series[]
+    private var current_hierarchy:HierarchySeries[]
     private var current_horizontal:ReferenceLine[]
     private var current_vertical:ReferenceLine[]
     private var current_title:str
@@ -144,6 +158,16 @@ public class Chart {
     private var current_y_decimals:int
     private var current_legend:LegendPlacement
     private var current_legend_alignment:LegendAlignment
+    private var current_palette:Palette
+    private var current_inner_radius:float
+    private var current_slice_gap:float
+    private var current_start_angle:float
+    private var current_slice_offsets:float[]
+    private var current_label_placement:LabelPlacement
+    private var current_percentages:bool
+    private var current_area_mode:AreaMode
+    private var current_fill_opacity:float
+    private var current_smooth:bool
     private var next_color:int
 
     package init() {
@@ -156,6 +180,9 @@ public class Chart {
         self.current_errors = []
         self.current_boxes = []
         self.current_candles = []
+        self.current_areas = []
+        self.current_circular = []
+        self.current_hierarchy = []
         self.current_horizontal = []
         self.current_vertical = []
         self.current_title = ""
@@ -169,20 +196,55 @@ public class Chart {
         self.current_y_decimals = -1
         self.current_legend = LegendPlacement.automatic()
         self.current_legend_alignment = LegendAlignment.center()
+        self.current_palette = Palette.modern()
+        self.current_inner_radius = 0.0
+        self.current_slice_gap = 0.0
+        self.current_start_angle = -90.0
+        self.current_slice_offsets = []
+        self.current_label_placement = LabelPlacement.inside()
+        self.current_percentages = false
+        self.current_area_mode = AreaMode.overlaid()
+        self.current_fill_opacity = 0.36
+        self.current_smooth = false
         self.next_color = 0
     }
 
     func line(x:float[], y:float[], label:str = "") {
+        self.require_cartesian()
         validate_xy(x, y, "line")
         self.current_lines.append(XYSeries(x:x, y:y, label:label, color:self.take_color()))
     }
 
     func scatter(x:float[], y:float[], label:str = "") {
+        self.require_cartesian()
         validate_xy(x, y, "scatter")
         self.current_scatters.append(XYSeries(x:x, y:y, label:label, color:self.take_color()))
     }
 
+    func area(x:float[], y:float[], label:str = "") {
+        self.require_cartesian()
+        validate_xy(x, y, "area")
+        if self.current_areas.count() > 0 && self.current_area_mode != AreaMode.overlaid() {
+            require_x_values(self.current_areas[0].x, x)
+            for value in y {
+                if value < 0.0 { panic("Plot stacked and normalized areas cannot contain negative values") }
+            }
+        }
+        self.current_areas.append(AreaSeries(x:x, y:y, label:label, color:self.take_color()))
+    }
+
+    func stacked_area(x:float[], values:float[][], labels:str[] = []) {
+        self.set_areas(x, values, labels, AreaMode.stacked())
+        self.current_fill_opacity = 0.82
+    }
+
+    func normalized_area(x:float[], values:float[][], labels:str[] = []) {
+        self.set_areas(x, values, labels, AreaMode.normalized())
+        self.current_fill_opacity = 0.82
+    }
+
     func bar(categories:str[], values:float[], label:str = "") {
+        self.require_cartesian()
         if categories.count() == 0 { panic("Plot bar data cannot be empty") }
         if categories.count() != values.count() {
             panic("Plot bars require one value for each category")
@@ -199,6 +261,7 @@ public class Chart {
     }
 
     func histogram(values:float[], bins:int = 20, label:str = "") {
+        self.require_cartesian()
         if values.count() == 0 { panic("Plot histogram data cannot be empty") }
         if bins < 1 { panic("Plot histogram bins must be positive") }
         validate_finite(values, "histogram")
@@ -235,6 +298,7 @@ public class Chart {
     }
 
     func heatmap(values:float[], columns:int, label:str = "") {
+        self.require_cartesian()
         if columns < 1 { panic("Plot heatmap columns must be positive") }
         if values.count() == 0 || values.count() % columns != 0 {
             panic("Plot heatmap values must form complete rows")
@@ -249,6 +313,7 @@ public class Chart {
     }
 
     func band(x:float[], lower:float[], upper:float[], label:str = "") {
+        self.require_cartesian()
         validate_xy(x, lower, "band")
         if x.count() != upper.count() { panic("Plot band bounds must match x values") }
         validate_finite(upper, "band")
@@ -269,6 +334,7 @@ public class Chart {
         upper:float[],
         label:str = ""
     ) {
+        self.require_cartesian()
         validate_xy(x, y, "error bars")
         if x.count() != lower.count() || x.count() != upper.count() {
             panic("Plot error bar bounds must match the point values")
@@ -288,6 +354,7 @@ public class Chart {
     }
 
     func box_plot(values:float[], label:str = "") {
+        self.require_cartesian()
         if values.count() == 0 { panic("Plot box plot data cannot be empty") }
         validate_finite(values, "box plot")
         var ordered:float[] = []
@@ -313,6 +380,7 @@ public class Chart {
         close:float[],
         label:str = ""
     ) {
+        self.require_cartesian()
         validate_xy(x, open, "candlesticks")
         if x.count() != high.count() || x.count() != low.count() || x.count() != close.count() {
             panic("Plot candlesticks require matching x, open, high, low, and close values")
@@ -335,14 +403,124 @@ public class Chart {
     }
 
     func horizontal(value:float, label:str = "") {
+        self.require_cartesian()
         validate_value(value, "horizontal reference")
         self.current_horizontal.append(ReferenceLine(value:value, label:label))
     }
 
     func vertical(value:float, label:str = "") {
+        self.require_cartesian()
         validate_value(value, "vertical reference")
         self.current_vertical.append(ReferenceLine(value:value, label:label))
     }
+
+    func pie(labels:str[], values:float[]) {
+        self.set_circular(labels, values, sum(values), Kind.pie())
+        self.current_inner_radius = 0.0
+    }
+
+    func donut(labels:str[], values:float[]) {
+        self.set_circular(labels, values, sum(values), Kind.donut())
+        self.current_inner_radius = 0.58
+    }
+
+    func gauge(value:float, maximum:float = 100.0, label:str = "") {
+        if !Math.is_finite(maximum) || maximum <= 0.0 {
+            panic("Plot gauge maximum must be positive and finite")
+        }
+        if !Math.is_finite(value) || value < 0.0 || value > maximum {
+            panic("Plot gauge value must be between zero and its maximum")
+        }
+        self.set_circular([label], [value], maximum, Kind.gauge())
+        self.current_inner_radius = 0.72
+        self.current_slice_gap = 0.0
+        self.current_percentages = true
+        self.current_label_placement = LabelPlacement.inside()
+    }
+
+    func polar_bar(labels:str[], values:float[], maximum:float = 0.0) {
+        var resolved_maximum = maximum
+        if resolved_maximum == 0.0 { resolved_maximum = maximum_value(values) }
+        if !Math.is_finite(resolved_maximum) || resolved_maximum <= 0.0 {
+            panic("Plot polar bar maximum must be positive and finite")
+        }
+        for value in values {
+            if value > resolved_maximum { panic("Plot polar bar values cannot exceed its maximum") }
+        }
+        self.set_circular(labels, values, resolved_maximum, Kind.polar_bar())
+        self.current_inner_radius = 0.0
+    }
+
+    func pyramid(labels:str[], values:float[]) {
+        self.set_hierarchy(labels, values, HierarchyKind.pyramid())
+        self.current_fill_opacity = 1.0
+    }
+
+    func funnel(labels:str[], values:float[]) {
+        self.set_hierarchy(labels, values, HierarchyKind.funnel())
+        self.current_fill_opacity = 1.0
+    }
+
+    func palette(value:Palette) { self.current_palette = value }
+
+    func fill_opacity(amount:float) {
+        if self.current_areas.count() == 0 && !self.is_hierarchy() {
+            panic("Plot fill opacity requires an area, pyramid, or funnel chart")
+        }
+        if !Math.is_finite(amount) || amount < 0.0 || amount > 1.0 {
+            panic("Plot fill opacity must be between 0 and 1")
+        }
+        self.current_fill_opacity = amount
+    }
+
+    func smooth() {
+        if self.current_areas.count() == 0 { panic("Plot smoothing requires an area chart") }
+        self.current_smooth = true
+    }
+
+    func straight() {
+        if self.current_areas.count() == 0 { panic("Plot straight lines require an area chart") }
+        self.current_smooth = false
+    }
+
+    func inner_radius(amount:float) {
+        self.require_circular()
+        if !Math.is_finite(amount) || amount < 0.0 || amount > 0.9 {
+            panic("Plot inner radius must be between 0 and 0.9")
+        }
+        self.current_inner_radius = amount
+    }
+
+    func slice_gap(degrees:float) {
+        self.require_circular()
+        if !Math.is_finite(degrees) || degrees < 0.0 || degrees > 20.0 {
+            panic("Plot slice gap must be between 0 and 20 degrees")
+        }
+        self.current_slice_gap = degrees
+    }
+
+    func start_angle(degrees:float) {
+        self.require_circular()
+        if !Math.is_finite(degrees) { panic("Plot start angle must be finite") }
+        self.current_start_angle = degrees
+    }
+
+    func explode(index:int, amount:float = 0.08) {
+        self.require_circular()
+        if index < 0 || index >= self.current_slice_offsets.count() {
+            panic("Plot exploded slice index is outside the chart")
+        }
+        if !Math.is_finite(amount) || amount < 0.0 || amount > 0.3 {
+            panic("Plot exploded slice amount must be between 0 and 0.3")
+        }
+        self.current_slice_offsets[index] = amount
+    }
+
+    func labels_hidden() { self.require_labeled_shape(); self.current_label_placement = LabelPlacement.hidden() }
+    func labels_inside() { self.require_labeled_shape(); self.current_label_placement = LabelPlacement.inside() }
+    func labels_outside() { self.require_labeled_shape(); self.current_label_placement = LabelPlacement.outside() }
+    func show_percentages() { self.require_labeled_shape(); self.current_percentages = true }
+    func hide_percentages() { self.require_labeled_shape(); self.current_percentages = false }
 
     func title(value:str) { self.current_title = value }
     func x_label(value:str) { self.current_x_label = value }
@@ -397,10 +575,14 @@ public class Chart {
         self.current_errors = []
         self.current_boxes = []
         self.current_candles = []
+        self.current_areas = []
+        self.current_circular = []
+        self.current_hierarchy = []
         self.current_horizontal = []
         self.current_vertical = []
         self.current_x_categories = []
         self.current_y_categories = []
+        self.current_slice_offsets = []
         self.next_color = 0
     }
 
@@ -413,6 +595,21 @@ public class Chart {
     package func errors() ErrorSeries[] { return self.current_errors }
     package func boxes() BoxSeries[] { return self.current_boxes }
     package func candles() CandleSeries[] { return self.current_candles }
+    package func areas() AreaSeries[] { return self.current_areas }
+    package func area_mode() AreaMode { return self.current_area_mode }
+    package func fill_opacity_amount() float { return self.current_fill_opacity }
+    package func smoothing_enabled() bool { return self.current_smooth }
+    package func is_circular() bool { return self.current_circular.count() != 0 }
+    package func circular() Series { return self.current_circular[0] }
+    package func palette_color(index:int) Color { return self.current_palette.color(index) }
+    package func inner_radius_amount() float { return self.current_inner_radius }
+    package func slice_gap_degrees() float { return self.current_slice_gap }
+    package func start_angle_degrees() float { return self.current_start_angle }
+    package func slice_offsets() float[] { return self.current_slice_offsets }
+    package func label_placement() LabelPlacement { return self.current_label_placement }
+    package func percentages_visible() bool { return self.current_percentages }
+    package func is_hierarchy() bool { return self.current_hierarchy.count() != 0 }
+    package func hierarchy() HierarchySeries { return self.current_hierarchy[0] }
     package func horizontal_lines() ReferenceLine[] { return self.current_horizontal }
     package func vertical_lines() ReferenceLine[] { return self.current_vertical }
     package func heading() str { return self.current_title }
@@ -461,15 +658,20 @@ public class Chart {
             self.current_bands.count() == 0 &&
             self.current_errors.count() == 0 &&
             self.current_boxes.count() == 0 &&
-            self.current_candles.count() == 0
+            self.current_candles.count() == 0 &&
+            self.current_areas.count() == 0 &&
+            self.current_circular.count() == 0 &&
+            self.current_hierarchy.count() == 0
     }
 
     package func bounds() Bounds {
         if self.is_empty() { panic("Plot chart requires at least one data series") }
+        if self.is_circular() || self.is_hierarchy() { panic("Plot shaped charts do not have Cartesian bounds") }
         let limit = 100000000000000000000000000000000000000.0
         var result = Bounds(x_min:limit, x_max:-limit, y_min:limit, y_max:-limit)
         for series in self.current_lines { result = include_xy(result, series.x, series.y) }
         for series in self.current_scatters { result = include_xy(result, series.x, series.y) }
+        result = self.include_area_bounds(result)
         for series in self.current_bands {
             result = include_xy(result, series.x, series.lower)
             result = include_xy(result, series.x, series.upper)
@@ -549,6 +751,7 @@ public class Chart {
         }
         let continuous_x = self.current_lines.count() > 0 ||
             self.current_scatters.count() > 0 ||
+            self.current_areas.count() > 0 ||
             self.current_bands.count() > 0 ||
             self.current_errors.count() > 0
         let visible_y = continuous_x || self.current_bars.count() > 0 ||
@@ -588,6 +791,7 @@ public class Chart {
     package func legend() LegendEntry[] {
         var entries:LegendEntry[] = []
         for value in self.current_bands { if value.label != "" { entries.append(LegendEntry(kind:MarkKind.band(), label:value.label, color:value.color)) } }
+        for value in self.current_areas { if value.label != "" { entries.append(LegendEntry(kind:MarkKind.area(), label:value.label, color:value.color)) } }
         for value in self.current_bars { if value.label != "" { entries.append(LegendEntry(kind:MarkKind.bar(), label:value.label, color:value.color)) } }
         for value in self.current_histograms { if value.label != "" { entries.append(LegendEntry(kind:MarkKind.histogram(), label:value.label, color:value.color)) } }
         for value in self.current_lines { if value.label != "" { entries.append(LegendEntry(kind:MarkKind.line(), label:value.label, color:value.color)) } }
@@ -595,6 +799,16 @@ public class Chart {
         for value in self.current_errors { if value.label != "" { entries.append(LegendEntry(kind:MarkKind.error_bars(), label:value.label, color:value.color)) } }
         for value in self.current_boxes { if value.label != "" { entries.append(LegendEntry(kind:MarkKind.box_plot(), label:value.label, color:value.color)) } }
         for value in self.current_candles { if value.label != "" { entries.append(LegendEntry(kind:MarkKind.candlesticks(), label:value.label, color:0)) } }
+        if self.is_circular() {
+            let circular = self.circular()
+            var index = 0
+            while index < circular.labels.count() {
+                if circular.labels[index] != "" {
+                    entries.append(LegendEntry(kind:MarkKind.sector(), label:circular.labels[index], color:index))
+                }
+                index++
+            }
+        }
         return entries
     }
 
@@ -603,6 +817,119 @@ public class Chart {
         self.next_color++
         return color
     }
+
+    private func set_circular(labels:str[], values:float[], maximum:float, kind:Kind) {
+        if !self.is_empty() { panic("Plot circular charts cannot be mixed with Cartesian marks") }
+        if labels.count() == 0 || labels.count() != values.count() {
+            panic("Plot circular charts require one label for each value")
+        }
+        validate_finite(values, "circular chart")
+        var positive = false
+        for value in values {
+            if value < 0.0 { panic("Plot circular chart values cannot be negative") }
+            if value > 0.0 { positive = true }
+        }
+        if !positive && kind != Kind.gauge() {
+            panic("Plot circular charts require at least one positive value")
+        }
+        self.current_circular.append(Series(labels:labels, values:values, maximum:maximum, kind:kind))
+        for value in values { self.current_slice_offsets.append(0.0) }
+    }
+
+    private func set_areas(x:float[], values:float[][], labels:str[], mode:AreaMode) {
+        self.require_cartesian()
+        if self.current_areas.count() != 0 || values.count() == 0 {
+            panic("Plot composed areas require a new chart and at least one series")
+        }
+        if labels.count() != 0 && labels.count() != values.count() {
+            panic("Plot composed areas require one label for each series")
+        }
+        var index = 0
+        while index < values.count() {
+            validate_xy(x, values[index], "composed area")
+            for value in values[index] {
+                if value < 0.0 { panic("Plot stacked and normalized areas cannot contain negative values") }
+            }
+            var label = ""
+            if labels.count() != 0 { label = labels[index] }
+            self.current_areas.append(AreaSeries(
+                x:x, y:values[index], label:label, color:self.take_color()
+            ))
+            index++
+        }
+        self.current_area_mode = mode
+    }
+
+    private func set_hierarchy(labels:str[], values:float[], kind:HierarchyKind) {
+        if !self.is_empty() { panic("Plot hierarchy charts cannot be mixed with other marks") }
+        if labels.count() == 0 || labels.count() != values.count() {
+            panic("Plot hierarchy charts require one label for each value")
+        }
+        validate_finite(values, "hierarchy chart")
+        var positive = false
+        for value in values {
+            if value < 0.0 { panic("Plot hierarchy chart values cannot be negative") }
+            if value > 0.0 { positive = true }
+        }
+        if !positive { panic("Plot hierarchy charts require at least one positive value") }
+        self.current_hierarchy.append(HierarchySeries(labels:labels, values:values, kind:kind))
+    }
+
+    private func include_area_bounds(bounds:Bounds) Bounds {
+        var result = bounds
+        if self.current_areas.count() == 0 { return result }
+        if self.current_area_mode == AreaMode.normalized() {
+            for x in self.current_areas[0].x { result = include_point(result, x, 0.0); result = include_point(result, x, 1.0) }
+            return result
+        }
+        let first_area = self.current_areas[0]
+        var totals = zero_values(first_area.x.count())
+        for series in self.current_areas {
+            result = include_xy(result, series.x, series.y)
+            for x in series.x { result = include_point(result, x, 0.0) }
+            if self.current_area_mode == AreaMode.stacked() {
+                var index = 0
+                while index < totals.count() {
+                    totals[index] += series.y[index]
+                    result = include_point(result, series.x[index], totals[index])
+                    index++
+                }
+            }
+        }
+        return result
+    }
+
+    private func require_circular() {
+        if !self.is_circular() { panic("Plot circular styling requires a circular chart") }
+    }
+
+    private func require_labeled_shape() {
+        if !self.is_circular() && !self.is_hierarchy() {
+            panic("Plot label placement requires a circular, pyramid, or funnel chart")
+        }
+    }
+
+    private func require_cartesian() {
+        if self.is_circular() || self.is_hierarchy() {
+            panic("Plot Cartesian marks cannot be mixed with a shaped chart")
+        }
+    }
+}
+
+func require_x_values(expected:float[], actual:float[]) {
+    if expected.count() != actual.count() { panic("Plot stacked areas require matching x values") }
+    var index = 0
+    while index < expected.count() {
+        if expected[index] != actual[index] { panic("Plot stacked areas require matching x values") }
+        index++
+    }
+}
+
+package func zero_values(count:int) float[] {
+    var result:float[] = []
+    var index = 0
+    while index < count { result.append(0.0); index++ }
+    return result
 }
 
 func validate_xy(x:float[], y:float[], kind:str) {
@@ -620,6 +947,19 @@ func validate_finite(values:float[], kind:str) {
 
 func validate_value(value:float, kind:str) {
     if !Math.is_finite(value) { panic("Plot $(kind) accepts only finite values") }
+}
+
+func sum(values:float[]) float {
+    var result = 0.0
+    for value in values { result += value }
+    return result
+}
+
+func maximum_value(values:float[]) float {
+    if values.count() == 0 { return 0.0 }
+    var result = values[0]
+    for value in values { result = Math.max(result, value) }
+    return result
 }
 
 func validate_decimals(digits:int) {
