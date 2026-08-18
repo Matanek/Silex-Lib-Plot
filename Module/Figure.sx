@@ -1,0 +1,502 @@
+use GFX.Canvas
+use GFX.Color
+use GFX.Viewer
+use STD.Error
+use STD.File
+use STD.Math
+use STD.Text
+
+enum SeriesKind {
+    line
+    scatter
+}
+
+struct Series {
+    let kind:SeriesKind
+    let x:float[]
+    let y:float[]
+    let label:str
+}
+
+struct Bounds {
+    let x_min:float
+    let x_max:float
+    let y_min:float
+    let y_max:float
+}
+
+struct Area {
+    let left:float
+    let top:float
+    let width:float
+    let height:float
+}
+
+public class Figure {
+    private var current_series:Series[]
+    private var current_title:str
+    private var current_x_label:str
+    private var current_y_label:str
+    private var current_width:int
+    private var current_height:int
+
+    package init() {
+        self.current_series = []
+        self.current_title = ""
+        self.current_x_label = ""
+        self.current_y_label = ""
+        self.current_width = 960
+        self.current_height = 640
+    }
+
+    func line(x:float[], y:float[], label:str = "") Figure {
+        self.append(SeriesKind.line(), x, y, label)
+        return self
+    }
+
+    func scatter(x:float[], y:float[], label:str = "") Figure {
+        self.append(SeriesKind.scatter(), x, y, label)
+        return self
+    }
+
+    func title(value:str) Figure {
+        self.current_title = value
+        return self
+    }
+
+    func x_label(value:str) Figure {
+        self.current_x_label = value
+        return self
+    }
+
+    func y_label(value:str) Figure {
+        self.current_y_label = value
+        return self
+    }
+
+    func size(width:int, height:int) Figure {
+        if width < 320 || height < 240 {
+            panic("Plot figure size must be at least 320 by 240 pixels")
+        }
+        self.current_width = width
+        self.current_height = height
+        return self
+    }
+
+    func show() int {
+        self.require_series()
+        var window_title = self.current_title
+        if window_title == "" { window_title = "Silex Plot" }
+        let width = self.current_width
+        let height = self.current_height
+        return Viewer.show(self.canvas(), width, height, window_title)
+    }
+
+    func svg() str {
+        self.require_series()
+        return render_svg(self)
+    }
+
+    func save_svg(path:str) Result<void, Error> {
+        return File.write_all(path, self.svg())
+    }
+
+    module func series() Series[] { return self.current_series }
+    module func heading() str { return self.current_title }
+    module func horizontal_label() str { return self.current_x_label }
+    module func vertical_label() str { return self.current_y_label }
+    module func pixel_width() int { return self.current_width }
+    module func pixel_height() int { return self.current_height }
+
+    private func append(kind:SeriesKind, x:float[], y:float[], label:str) {
+        validate_points(x, y)
+        self.current_series.append(Series(kind:kind, x:x, y:y, label:label))
+    }
+
+    private func require_series() {
+        if self.current_series.count() == 0 {
+            panic("Plot figure requires at least one data series")
+        }
+    }
+
+    module func canvas() Canvas {
+        let width = self.current_width
+        let height = self.current_height
+        var canvas = Canvas()
+        canvas.paint(func(painter:&Canvas.Painter) {
+            paint_figure(painter, self, width, height)
+        })
+        return canvas
+    }
+}
+
+func validate_points(x:float[], y:float[]) {
+    if x.count() == 0 { panic("Plot data series cannot be empty") }
+    if x.count() != y.count() {
+        panic("Plot data series requires the same number of x and y values")
+    }
+    var index = 0
+    while index < x.count() {
+        if !Math.is_finite(x[index]) || !Math.is_finite(y[index]) {
+            panic("Plot data series accepts only finite values")
+        }
+        index++
+    }
+}
+
+func figure_area(width:int, height:int) Area {
+    return Area(
+        left:92.0,
+        top:72.0,
+        width:width as float - 124.0,
+        height:height as float - 164.0
+    )
+}
+
+func figure_bounds(figure:Figure) Bounds {
+    let series = figure.series()
+    var x_min = series[0].x[0]
+    var x_max = x_min
+    var y_min = series[0].y[0]
+    var y_max = y_min
+    for values in series {
+        var index = 0
+        while index < values.x.count() {
+            x_min = Math.min(x_min, values.x[index])
+            x_max = Math.max(x_max, values.x[index])
+            y_min = Math.min(y_min, values.y[index])
+            y_max = Math.max(y_max, values.y[index])
+            index++
+        }
+    }
+    if x_min == x_max {
+        let padding = Math.max(Math.abs(x_min) * 0.05, 0.5)
+        x_min -= padding
+        x_max += padding
+    }
+    if y_min == y_max {
+        let padding = Math.max(Math.abs(y_min) * 0.05, 0.5)
+        y_min -= padding
+        y_max += padding
+    }
+    return Bounds(x_min:x_min, x_max:x_max, y_min:y_min, y_max:y_max)
+}
+
+func plot_x(value:float, bounds:Bounds, area:Area) float {
+    return area.left + (value - bounds.x_min) / (bounds.x_max - bounds.x_min) * area.width
+}
+
+func plot_y(value:float, bounds:Bounds, area:Area) float {
+    return area.top + area.height -
+        (value - bounds.y_min) / (bounds.y_max - bounds.y_min) * area.height
+}
+
+func paint_figure(painter:&Canvas.Painter, figure:Figure, width:int, height:int) {
+    let area = figure_area(width, height)
+    let bounds = figure_bounds(figure)
+    painter.fill(
+        Canvas.Rect(Math.Vec2(), Math.Vec2(width as float, height as float)),
+        Canvas.Fill.solid(Color.white())
+    )
+    painter.fill(
+        Canvas.Rect(Math.Vec2(area.left, area.top), Math.Vec2(area.width, area.height), 8.0),
+        Canvas.Fill.solid(Color.slate_50())
+    )
+    paint_grid(painter, bounds, area)
+    paint_series(painter, figure.series(), bounds, area)
+    paint_labels(painter, figure, bounds, area)
+    paint_legend(painter, figure.series(), area)
+}
+
+func paint_grid(painter:&Canvas.Painter, bounds:Bounds, area:Area) {
+    var tick = 0
+    while tick <= 5 {
+        let amount = tick as float / 5.0
+        let x = area.left + area.width * amount
+        let y = area.top + area.height * amount
+        let grid = Canvas.Stroke(Color.slate_200(), 1.0)
+        painter.stroke(Canvas.Line(Math.Vec2(x, area.top), Math.Vec2(x, area.top + area.height)), grid)
+        painter.stroke(Canvas.Line(Math.Vec2(area.left, y), Math.Vec2(area.left + area.width, y)), grid)
+        painter.text(
+            "$(bounds.x_min + (bounds.x_max - bounds.x_min) * amount)",
+            Math.Vec2(x - 18.0, area.top + area.height + 10.0),
+            Canvas.TextStyle(size:12.0, color:Color.slate_600())
+        )
+        painter.text(
+            "$(bounds.y_max - (bounds.y_max - bounds.y_min) * amount)",
+            Math.Vec2(10.0, y - 7.0),
+            Canvas.TextStyle(size:12.0, color:Color.slate_600())
+        )
+        tick++
+    }
+    let axis = Canvas.Stroke(Color.slate_700(), 1.5)
+    painter.stroke(
+        Canvas.Line(Math.Vec2(area.left, area.top), Math.Vec2(area.left, area.top + area.height)),
+        axis
+    )
+    painter.stroke(
+        Canvas.Line(Math.Vec2(area.left, area.top + area.height), Math.Vec2(area.left + area.width, area.top + area.height)),
+        axis
+    )
+}
+
+func paint_series(painter:&Canvas.Painter, series:Series[], bounds:Bounds, area:Area) {
+    var series_index = 0
+    while series_index < series.count() {
+        let values = series[series_index]
+        let color = series_color(series_index)
+        if values.kind == SeriesKind.line() {
+            var path = Canvas.Path()
+            var point = 0
+            while point < values.x.count() {
+                let position = Math.Vec2(
+                    plot_x(values.x[point], bounds, area),
+                    plot_y(values.y[point], bounds, area)
+                )
+                if point == 0 { path.move_to(position) }
+                else { path.line_to(position) }
+                point++
+            }
+            if values.x.count() > 1 {
+                painter.stroke(
+                    path,
+                    Canvas.Stroke(color, 3.0)
+                        ..cap = Canvas.StrokeCap.round
+                        ..join = Canvas.StrokeJoin.round
+                )
+            } else {
+                painter.fill(
+                    Canvas.Circle(Math.Vec2(plot_x(values.x[0], bounds, area), plot_y(values.y[0], bounds, area)), 4.0),
+                    Canvas.Fill.solid(color)
+                )
+            }
+        } else {
+            var point = 0
+            while point < values.x.count() {
+                painter.fill(
+                    Canvas.Circle(Math.Vec2(
+                        plot_x(values.x[point], bounds, area),
+                        plot_y(values.y[point], bounds, area)
+                    ), 4.5),
+                    Canvas.Fill.solid(color)
+                )
+                point++
+            }
+        }
+        series_index++
+    }
+}
+
+func paint_labels(painter:&Canvas.Painter, figure:Figure, bounds:Bounds, area:Area) {
+    if figure.heading() != "" {
+        painter.text(
+            figure.heading(),
+            Math.Vec2(area.left, 22.0),
+            Canvas.TextStyle(size:24.0, color:Color.slate_900())
+        )
+    }
+    if figure.horizontal_label() != "" {
+        painter.text(
+            figure.horizontal_label(),
+            Math.Vec2(area.left + area.width * 0.5 - 32.0, area.top + area.height + 48.0),
+            Canvas.TextStyle(size:15.0, color:Color.slate_700())
+        )
+    }
+    if figure.vertical_label() != "" {
+        painter.text(
+            figure.vertical_label(),
+            Math.Vec2(10.0, area.top - 28.0),
+            Canvas.TextStyle(size:15.0, color:Color.slate_700())
+        )
+    }
+}
+
+func paint_legend(painter:&Canvas.Painter, series:Series[], area:Area) {
+    var count = 0
+    for values in series { if values.label != "" { count++ } }
+    if count == 0 { return }
+    let width = 180.0
+    let height = count as float * 24.0 + 16.0
+    let left = area.left + area.width - width - 12.0
+    let top = area.top + 12.0
+    painter.fill(
+        Canvas.Rect(Math.Vec2(left, top), Math.Vec2(width, height), 6.0),
+        Canvas.Fill.solid(Color.white().with_alpha(0.92))
+    )
+    var row = 0
+    var index = 0
+    while index < series.count() {
+        if series[index].label != "" {
+            let y = top + 14.0 + row as float * 24.0
+            if series[index].kind == SeriesKind.line() {
+                painter.stroke(
+                    Canvas.Line(Math.Vec2(left + 12.0, y), Math.Vec2(left + 34.0, y)),
+                    Canvas.Stroke(series_color(index), 3.0)
+                )
+            } else {
+                painter.fill(
+                    Canvas.Circle(Math.Vec2(left + 23.0, y), 4.0),
+                    Canvas.Fill.solid(series_color(index))
+                )
+            }
+            painter.text(
+                series[index].label,
+                Math.Vec2(left + 44.0, y - 8.0),
+                Canvas.TextStyle(size:13.0, color:Color.slate_800())
+            )
+            row++
+        }
+        index++
+    }
+}
+
+func series_color(index:int) Color {
+    let palette_index = index % 6
+    if palette_index == 0 { return Color.blue_600() }
+    if palette_index == 1 { return Color.rose_500() }
+    if palette_index == 2 { return Color.emerald_600() }
+    if palette_index == 3 { return Color.amber_500() }
+    if palette_index == 4 { return Color.violet_600() }
+    return Color.cyan_600()
+}
+
+func svg_color(index:int) str {
+    let palette_index = index % 6
+    if palette_index == 0 { return "#155dfc" }
+    if palette_index == 1 { return "#f6339a" }
+    if palette_index == 2 { return "#009966" }
+    if palette_index == 3 { return "#fe9a00" }
+    if palette_index == 4 { return "#7f22fe" }
+    return "#0092b8"
+}
+
+func render_svg(figure:Figure) str {
+    let width = figure.pixel_width()
+    let height = figure.pixel_height()
+    let area = figure_area(width, height)
+    let bounds = figure_bounds(figure)
+    var result = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"$(width)\" height=\"$(height)\" viewBox=\"0 0 $(width) $(height)\">\n"
+    result += "<rect width=\"100%\" height=\"100%\" fill=\"white\"/>\n"
+    result += "<rect x=\"$(area.left)\" y=\"$(area.top)\" width=\"$(area.width)\" height=\"$(area.height)\" rx=\"8\" fill=\"#f8fafc\"/>\n"
+    result += svg_grid(bounds, area)
+    result += svg_series(figure.series(), bounds, area)
+    result += svg_labels(figure, area)
+    result += svg_legend(figure.series(), area)
+    result += "</svg>\n"
+    return result
+}
+
+func svg_grid(bounds:Bounds, area:Area) str {
+    var result = "<g stroke=\"#e2e8f0\" stroke-width=\"1\" fill=\"none\">\n"
+    var tick = 0
+    while tick <= 5 {
+        let amount = tick as float / 5.0
+        let x = area.left + area.width * amount
+        let y = area.top + area.height * amount
+        result += "<path d=\"M $(x) $(area.top) L $(x) $(area.top + area.height)\"/>\n"
+        result += "<path d=\"M $(area.left) $(y) L $(area.left + area.width) $(y)\"/>\n"
+        tick++
+    }
+    result += "</g>\n<g fill=\"#475569\" font-family=\"sans-serif\" font-size=\"12\">\n"
+    tick = 0
+    while tick <= 5 {
+        let amount = tick as float / 5.0
+        let x = area.left + area.width * amount
+        let y = area.top + area.height * amount
+        result += "<text x=\"$(x)\" y=\"$(area.top + area.height + 24.0)\" text-anchor=\"middle\">$(bounds.x_min + (bounds.x_max - bounds.x_min) * amount)</text>\n"
+        result += "<text x=\"$(area.left - 10.0)\" y=\"$(y + 4.0)\" text-anchor=\"end\">$(bounds.y_max - (bounds.y_max - bounds.y_min) * amount)</text>\n"
+        tick++
+    }
+    result += "</g>\n"
+    result += "<path d=\"M $(area.left) $(area.top) L $(area.left) $(area.top + area.height) L $(area.left + area.width) $(area.top + area.height)\" fill=\"none\" stroke=\"#334155\" stroke-width=\"1.5\"/>\n"
+    return result
+}
+
+func svg_series(series:Series[], bounds:Bounds, area:Area) str {
+    var result = ""
+    var series_index = 0
+    while series_index < series.count() {
+        let values = series[series_index]
+        let color = svg_color(series_index)
+        if values.kind == SeriesKind.line() && values.x.count() > 1 {
+            var points = ""
+            var point = 0
+            while point < values.x.count() {
+                if point != 0 { points += " " }
+                points += "$(plot_x(values.x[point], bounds, area)),$(plot_y(values.y[point], bounds, area))"
+                point++
+            }
+            result += "<polyline points=\"$(points)\" fill=\"none\" stroke=\"$(color)\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n"
+        } else {
+            var point = 0
+            while point < values.x.count() {
+                result += "<circle cx=\"$(plot_x(values.x[point], bounds, area))\" cy=\"$(plot_y(values.y[point], bounds, area))\" r=\"4.5\" fill=\"$(color)\"/>\n"
+                point++
+            }
+        }
+        series_index++
+    }
+    return result
+}
+
+func svg_labels(figure:Figure, area:Area) str {
+    var result = "<g fill=\"#0f172a\" font-family=\"sans-serif\">\n"
+    if figure.heading() != "" {
+        result += "<text x=\"$(area.left)\" y=\"42\" font-size=\"24\">$(escape_xml(figure.heading()))</text>\n"
+    }
+    if figure.horizontal_label() != "" {
+        result += "<text x=\"$(area.left + area.width * 0.5)\" y=\"$(area.top + area.height + 62.0)\" font-size=\"15\" text-anchor=\"middle\">$(escape_xml(figure.horizontal_label()))</text>\n"
+    }
+    if figure.vertical_label() != "" {
+        let center = area.top + area.height * 0.5
+        result += "<text x=\"24\" y=\"$(center)\" font-size=\"15\" text-anchor=\"middle\" transform=\"rotate(-90 24 $(center))\">$(escape_xml(figure.vertical_label()))</text>\n"
+    }
+    result += "</g>\n"
+    return result
+}
+
+func svg_legend(series:Series[], area:Area) str {
+    var count = 0
+    for values in series { if values.label != "" { count++ } }
+    if count == 0 { return "" }
+    let width = 180.0
+    let height = count as float * 24.0 + 16.0
+    let left = area.left + area.width - width - 12.0
+    let top = area.top + 12.0
+    var result = "<g font-family=\"sans-serif\" font-size=\"13\"><rect x=\"$(left)\" y=\"$(top)\" width=\"$(width)\" height=\"$(height)\" rx=\"6\" fill=\"white\" fill-opacity=\"0.92\"/>\n"
+    var row = 0
+    var index = 0
+    while index < series.count() {
+        if series[index].label != "" {
+            let y = top + 14.0 + row as float * 24.0
+            if series[index].kind == SeriesKind.line() {
+                result += "<path d=\"M $(left + 12.0) $(y) L $(left + 34.0) $(y)\" stroke=\"$(svg_color(index))\" stroke-width=\"3\"/>\n"
+            } else {
+                result += "<circle cx=\"$(left + 23.0)\" cy=\"$(y)\" r=\"4\" fill=\"$(svg_color(index))\"/>\n"
+            }
+            result += "<text x=\"$(left + 44.0)\" y=\"$(y + 4.0)\" fill=\"#1e293b\">$(escape_xml(series[index].label))</text>\n"
+            row++
+        }
+        index++
+    }
+    result += "</g>\n"
+    return result
+}
+
+func escape_xml(value:str) str {
+    var escaped = Text.replace(value, "&", "&amp;")
+    escaped = Text.replace(escaped, "<", "&lt;")
+    escaped = Text.replace(escaped, ">", "&gt;")
+    escaped = Text.replace(escaped, "\"", "&quot;")
+    return Text.replace(escaped, "'", "&apos;")
+}
+
+test "derive a positive plotting area from the minimum interactive size" {
+    let minimum = figure_area(320, 240)
+    assert(minimum.width > 0.0)
+    assert(minimum.height > 0.0)
+
+    let resized = figure_area(1600, 900)
+    assert(resized.width == 1476.0)
+    assert(resized.height == 736.0)
+}

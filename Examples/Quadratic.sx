@@ -1,0 +1,20 @@
+use Plot
+
+func main() {
+    let x:float[] = [0.0, 1.0, 2.0, 3.0, 4.0]
+    let measured:float[] = [0.1, 0.9, 4.2, 8.8, 16.1]
+    let expected:float[] = [0.0, 1.0, 4.0, 9.0, 16.0]
+
+    var figure = Plot.line(x, expected, "Modèle")
+        .scatter(x, measured, "Mesures")
+        .title("Croissance quadratique")
+        .x_label("Temps")
+        .y_label("Valeur")
+
+    match figure.save_svg("quadratic.svg") {
+        failure(error) => { panic(error.operation + ": " + error.detail) }
+        success => {}
+    }
+
+    figure.show()
+}

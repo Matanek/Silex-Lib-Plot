@@ -1,0 +1,10 @@
+public use Plot.Figure.Figure
+
+public func line(x:float[], y:float[], label:str = "") Figure {
+    return Figure().line(x, y, label)
+}
+
+public func scatter(x:float[], y:float[], label:str = "") Figure {
+    return Figure().scatter(x, y, label)
+}
+
