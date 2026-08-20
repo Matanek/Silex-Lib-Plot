@@ -1,9 +1,8 @@
 {
   "name": "Plot",
-  "version": "0.3.0",
-  "extensions": [],
+  "version": "0.3.1",
   "requires": {
-    "silex": ">=0.38.25"
+    "silex": ">=0.38.33"
   },
   "dependencies": {
     "GFX": "^0.32.4",
