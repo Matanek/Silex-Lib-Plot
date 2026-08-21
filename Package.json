@@ -1,11 +1,13 @@
 {
   "name": "Plot",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "requires": {
-    "silex": ">=0.38.33"
+    "silex": ">=0.38.36"
   },
   "dependencies": {
-    "GFX": "^0.32.4",
+    "GFX": "^0.37.0",
+    "GFX.Canvas": "^0.1.0",
+    "GFX.Viewer": "^0.1.0",
     "STD": "^0.16.5"
   }
 }

@@ -3,8 +3,9 @@
 Plot turns Silex data into charts without exposing a graphics pipeline. It is
 aimed at scientific computing, AI experiments, benchmarks, finance, and the
 other workflows where visualization should stay simpler than the problem being
-studied. GFX provides the native vector presentation; Plot can also emit
-standalone SVG documents for reports, publications, and headless workflows.
+studied. `GFX.Viewer` provides the native vector presentation behind
+`Figure.show()`; Plot can also emit standalone SVG documents for reports,
+publications, and headless workflows.
 
 ```text
 silex install Plot
