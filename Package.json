@@ -1,8 +1,10 @@
 {
   "name": "Plot",
-  "version": "0.4.0",
+  "version": "0.5.0",
+  "description": "Create charts from Silex data and present them natively or export standalone SVG.",
+  "authors": ["Matanek"],
   "requires": {
-    "silex": ">=0.38.36"
+    "silex": ">=0.39.0"
   },
   "dependencies": {
     "GFX": "^0.37.0",
