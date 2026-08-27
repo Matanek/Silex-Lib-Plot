@@ -247,12 +247,9 @@ Register the checkout and run the consumer tests with the current toolchain:
 ```text
 silex link .
 silex test Tests
-silex compile Examples/Quadratic.sx -o quadratic
-silex compile Examples/ScientificDashboard.sx -o scientific-dashboard
-silex compile Examples/CircularGallery.sx -o circular-gallery
-silex compile Examples/FilledGallery.sx -o filled-gallery
 ```
 
-The examples cover a line/scatter comparison, scientific and AI monitoring,
-benchmark reporting, financial OHLC data, a customizable circular dashboard,
-and a gallery of filled areas and progression shapes.
+The central [Plot gallery](https://github.com/Matanek/Silex-Examples/blob/main/Sources/PlotGallery.sx)
+covers a line/scatter comparison, scientific and AI monitoring, benchmark
+reporting, financial OHLC data, a customizable circular dashboard, and a
+gallery of filled areas and progression shapes.
