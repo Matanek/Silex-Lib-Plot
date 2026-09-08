@@ -1,6 +1,6 @@
 {
   "name": "Plot",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": {
     "en": "Create charts from Silex data and present them natively or export standalone SVG.",
     "fr": "Crée des graphiques à partir de données Silex, les présente nativement ou les exporte en SVG autonome."
