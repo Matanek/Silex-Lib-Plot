@@ -1,7 +1,7 @@
 # Plot
 
-`Plot` transforme les données Silex en graphiques vectoriels, affichés dans une
-fenêtre native ou exportés en SVG autonome.
+`Plot` turns Silex data into vector charts displayed in a native window or
+exported as standalone SVG.
 
 ```text
 silex install Plot
@@ -9,7 +9,7 @@ silex install Plot
 
 ## Documentation
 
-- [Documentation française](Docs/FR/README.md)
+- [French documentation](Docs/FR/README.md)
 - [English documentation](Docs/EN/README.md)
 
-Le package nécessite Silex 0.43.0 ou une version ultérieure.
+The package requires Silex 0.43.0 or newer.
