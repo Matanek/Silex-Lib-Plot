@@ -169,7 +169,7 @@ public class Figure {
     }
 
     func save_svg(path:str) Result<void, Error> {
-        return File.write_all(path, self.svg())
+        return (try File.write_all(path, self.svg()))
     }
 
     package func charts() Chart[] { return self.current_charts }

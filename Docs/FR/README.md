@@ -27,7 +27,7 @@ Composez plusieurs marques avant l’affichage ou l’export :
 var figure = Plot.line(x, expected, "Modèle")
     ..scatter(x, measured, "Mesures")
 
-match figure.save_svg("comparison.svg") {
+match try figure.save_svg("comparison.svg") {
     failure(error) => { panic(error.operation + ": " + error.detail) }
     success => {}
 }
@@ -45,9 +45,9 @@ heatmaps, bandes d’incertitude, barres d’erreur, box plots, chandeliers, sec
 anneaux, jauges, barres polaires, pyramides, entonnoirs et lignes de référence.
 
 ```sx
-let distribution = Plot.histogram(samples, 30, "Latence")
-let comparison = Plot.bar(["CPU", "GPU"], [82.0, 19.0], "ms")
-let summary = Plot.box_plot(before, "Avant")..box_plot(after, "Après")
+var distribution = Plot.histogram(samples, 30, "Latence")
+var comparison = Plot.bar(["CPU", "GPU"], [82.0, 19.0], "ms")
+var summary = Plot.box_plot(before, "Avant")..box_plot(after, "Après")
 ```
 
 Les entrées sont contrôlées avant rendu : longueurs compatibles, valeurs finies
@@ -57,7 +57,7 @@ et domaines valides. Les heatmaps utilisent un tableau aplati par lignes.
 ## Graphiques circulaires et palettes
 
 ```sx
-let share = Plot.donut(
+var share = Plot.donut(
     ["Produit", "Services", "Support"],
     [52.0, 31.0, 17.0]
 )
@@ -76,12 +76,12 @@ libellés peuvent être masqués, placés dedans ou dehors. `start_angle`,
 ## Aires et progressions
 
 ```sx
-let activity = Plot.area(months, product, "Produit")
+var activity = Plot.area(months, product, "Produit")
     ..area(months, services, "Services")
     ..fill_opacity(0.30)
     ..smooth()
 
-let mix = Plot.normalized_area(
+var mix = Plot.normalized_area(
     months,
     [product, services, support],
     ["Produit", "Services", "Support"]
